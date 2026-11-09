@@ -1,0 +1,71 @@
+{
+  "name": "media-tag-updater",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Ứng dụng quản lý, tra cứu tự động và cập nhật Tag/Thumbnail cho file Nhạc, Phim và Ảnh trên Windows",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev:vite": "vite",
+    "build:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --external electron --external ffmpeg-static --external node-taglib-sharp",
+    "watch:electron": "tsup electron/main.ts electron/preload.ts --out-dir dist-electron --format cjs --external electron --external ffmpeg-static --external node-taglib-sharp --watch",
+    "dev": "npm run build:electron && concurrently -k \"vite --port 5173\" \"npm run watch:electron\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "build": "vite build && npm run build:electron",
+    "dist": "npm run build && electron-builder --win",
+    "setup:binaries": "node scripts/setup-binaries.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "build": {
+    "appId": "com.mediatagupdater.app",
+    "productName": "Media Tag Updater",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  },
+  "dependencies": {
+    "exifreader": "^4.23.5",
+    "ffmpeg-static": "^5.2.0",
+    "lucide-react": "^0.460.0",
+    "node-taglib-sharp": "^5.2.1",
+    "piexifjs": "^1.0.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.5",
+    "wait-on": "^8.0.1"
+  }
+}

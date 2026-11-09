@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build and Packaging outputs
+dist/
+dist-electron/
+release/
+build/
+
+# Binary tools (downloaded/extracted via `npm run setup:binaries`)
+bin/*.exe
+bin/exiftool_files/
+!bin/README.md
+!bin/.gitkeep
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment and Local Config files
+.env
+.env.local
+.env.*.local
+
+# Testing and Coverage
+coverage/
+*.lcov
+.vitest/
+
+# Caches and Temporary files
+.cache/
+.eslintcache
+*.tsbuildinfo
+tmp/
+temp/
+
+# Editor and IDE directories
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
