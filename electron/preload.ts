@@ -29,6 +29,9 @@ const api: ElectronMediaApi = {
   installBinariesToProject: () => ipcRenderer.invoke('media:installBinariesToProject'),
   openPathInExplorer: (targetPath: string) =>
     ipcRenderer.invoke('media:openPathInExplorer', targetPath),
+  findDuplicates: (items: MediaFileItem[]) => ipcRenderer.invoke('media:findDuplicates', items),
+  moveFilesToTrash: (filePaths: string[]) =>
+    ipcRenderer.invoke('media:moveFilesToTrash', filePaths),
 };
 
 contextBridge.exposeInMainWorld('mediaApi', api);

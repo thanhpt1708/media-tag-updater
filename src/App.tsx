@@ -1,25 +1,39 @@
-import React, { useMemo, useState } from 'react';
-import { Sidebar } from './components/Sidebar';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Sidebar, SidebarFilter } from './components/Sidebar';
 import { MediaFileList } from './components/MediaFileList';
 import { TagInspectorPanel } from './components/TagInspectorPanel';
 import { OnlineSearchModal } from './components/OnlineSearchModal';
 import { FilenameToolModal } from './components/FilenameToolModal';
 import { SettingsModal } from './components/SettingsModal';
-import { MediaFileItem, MediaMetadata, MediaType } from './shared/types';
+import { DuplicatesModal } from './components/DuplicatesModal';
+import {
+  DuplicateKind,
+  DuplicateScanResult,
+  MediaFileItem,
+  MediaMetadata,
+} from './shared/types';
 import { getMediaApi } from './utils/ipcClient';
-import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Copy } from 'lucide-react';
 
 export function App() {
   const [items, setItems] = useState<MediaFileItem[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
-  const [activeFilter, setActiveFilter] = useState<
-    'all' | MediaType | 'missing-tag' | 'missing-thumb'
-  >('all');
+  const [activeFilter, setActiveFilter] = useState<SidebarFilter>('all');
+
+  // Phát hiện file trùng lặp
+  const [duplicateResult, setDuplicateResult] = useState<DuplicateScanResult | null>(null);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+  const [isDuplicatesModalOpen, setIsDuplicatesModalOpen] = useState(false);
+  /** Hiện cả các nhóm "có thể trùng" (cùng thời lượng / cùng dung lượng) – mặc định ẩn */
+  const [showLowConfidence, setShowLowConfidence] = useState(false);
+  /** Tăng mỗi khi danh sách file được nạp/đổi tên → kích hoạt quét trùng lặp chạy nền */
+  const [duplicateScanVersion, setDuplicateScanVersion] = useState(0);
+  const duplicateRequestId = useRef(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{
-    type: 'success' | 'error';
+    type: 'success' | 'error' | 'warning';
     message: string;
   } | null>(null);
 
@@ -28,7 +42,7 @@ export function App() {
   const [isFilenameModalOpen, setIsFilenameModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = (type: 'success' | 'error' | 'warning', message: string) => {
     setToast({ type, message });
     setTimeout(() => {
       setToast((prev) => (prev?.message === message ? null : prev));
@@ -46,6 +60,101 @@ export function App() {
     });
     if (newItems.length > 0 && selectedPaths.size === 0) {
       setSelectedPaths(new Set([newItems[0].filePath]));
+    }
+    if (newItems.length > 0) {
+      setDuplicateScanVersion((v) => v + 1);
+    }
+  };
+
+  // Chạy nền sau mỗi lần nạp thư mục / file: so sánh nội dung để tìm file trùng lặp
+  useEffect(() => {
+    if (duplicateScanVersion === 0) return;
+    if (items.length < 2) {
+      setDuplicateResult(null);
+      return;
+    }
+    const requestId = ++duplicateRequestId.current;
+    // Không gửi thumbnail Base64 qua IPC để giảm tải
+    const payload = items.map((i) => ({
+      ...i,
+      metadata: { ...i.metadata, thumbnailDataUrl: undefined },
+    }));
+    setIsCheckingDuplicates(true);
+    getMediaApi()
+      .findDuplicates(payload)
+      .then((res) => {
+        if (requestId !== duplicateRequestId.current) return;
+        setDuplicateResult(res);
+        const high = res.groups.filter((g) => g.confidence === 'high');
+        const lowCount = res.groups.length - high.length;
+        if (high.length > 0 || lowCount > 0) {
+          const fileCount = new Set(high.flatMap((g) => g.filePaths)).size;
+          const lowNote = lowCount > 0 ? ` (+${lowCount} nhóm có thể trùng)` : '';
+          showToast(
+            'warning',
+            high.length > 0
+              ? `Phát hiện ${high.length} nhóm media trùng lặp (${fileCount} file)${lowNote}. Xem tại mục "File Trùng lặp".`
+              : `Có ${lowCount} nhóm video có thể trùng (cùng thời lượng / dung lượng). Xem tại "Quản lý File Trùng lặp".`
+          );
+        }
+      })
+      .catch((err: any) => {
+        if (requestId !== duplicateRequestId.current) return;
+        showToast('error', err?.message || 'Lỗi khi kiểm tra file trùng lặp');
+      })
+      .finally(() => {
+        if (requestId === duplicateRequestId.current) setIsCheckingDuplicates(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duplicateScanVersion]);
+
+  /** filePath → loại trùng nghiêm trọng nhất (identical > similar-image > similar-video > same-title > ...) */
+  const duplicateKinds = useMemo(() => {
+    const map = new Map<string, DuplicateKind>();
+    const rank: Record<DuplicateKind, number> = {
+      identical: 0,
+      'similar-image': 1,
+      'similar-video': 2,
+      'same-title': 3,
+      'same-duration': 4,
+      'same-size': 5,
+    };
+    for (const g of duplicateResult?.groups || []) {
+      if (g.confidence === 'low' && !showLowConfidence) continue;
+      for (const fp of g.filePaths) {
+        const cur = map.get(fp);
+        if (!cur || rank[g.kind] < rank[cur]) map.set(fp, g.kind);
+      }
+    }
+    return map;
+  }, [duplicateResult, showLowConfidence]);
+
+  const handleMoveToTrash = async (filePaths: string[]) => {
+    try {
+      const res = await getMediaApi().moveFilesToTrash(filePaths);
+      const removed = new Set(res.trashed);
+      setItems((prev) => prev.filter((i) => !removed.has(i.filePath)));
+      setSelectedPaths((prev) => new Set([...prev].filter((p) => !removed.has(p))));
+      setDuplicateResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              groups: prev.groups
+                .map((g) => ({ ...g, filePaths: g.filePaths.filter((fp) => !removed.has(fp)) }))
+                .filter((g) => g.filePaths.length >= 2),
+            }
+          : prev
+      );
+      if (res.errors.length > 0) {
+        showToast(
+          'error',
+          `Đã chuyển ${res.trashed.length} file vào Thùng rác, lỗi ${res.errors.length} file: ${res.errors[0].error}`
+        );
+      } else {
+        showToast('success', `Đã chuyển ${res.trashed.length} file trùng lặp vào Thùng rác.`);
+      }
+    } catch (err: any) {
+      showToast('error', err?.message || 'Lỗi khi chuyển file vào Thùng rác');
     }
   };
 
@@ -110,6 +219,7 @@ export function App() {
       if (activeFilter === 'image' && item.mediaType !== 'image') return false;
       if (activeFilter === 'missing-tag' && item.metadata.title) return false;
       if (activeFilter === 'missing-thumb' && item.metadata.thumbnailDataUrl) return false;
+      if (activeFilter === 'duplicates' && !duplicateKinds.has(item.filePath)) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -124,7 +234,7 @@ export function App() {
 
       return true;
     });
-  }, [items, activeFilter, searchQuery]);
+  }, [items, activeFilter, searchQuery, duplicateKinds]);
 
   const selectedItems = useMemo(() => {
     return items.filter((i) => selectedPaths.has(i.filePath));
@@ -222,6 +332,9 @@ export function App() {
         }
         return next;
       });
+      if (res.renamed.length > 0 && duplicateResult) {
+        setDuplicateScanVersion((v) => v + 1);
+      }
 
       if (res.errors.length > 0) {
         showToast(
@@ -257,10 +370,20 @@ export function App() {
         onClearList={() => {
           setItems([]);
           setSelectedPaths(new Set());
+          duplicateRequestId.current++;
+          setDuplicateResult(null);
+          setIsCheckingDuplicates(false);
         }}
         onOpenBatchOnline={() => setOnlineModalTargets(activeTargetsForTools)}
         onOpenFilenameTool={() => setIsFilenameModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenDuplicates={() => setIsDuplicatesModalOpen(true)}
+        duplicateFileCount={duplicateKinds.size}
+        duplicateGroupCount={
+          duplicateResult?.groups.filter((g) => showLowConfidence || g.confidence === 'high')
+            .length || 0
+        }
+        isCheckingDuplicates={isCheckingDuplicates}
         selectedCount={selectedPaths.size}
       />
 
@@ -280,6 +403,7 @@ export function App() {
         onQuickSearchOnline={(item) => setOnlineModalTargets([item])}
         onBatchSearchGroup={(groupItems) => setOnlineModalTargets(groupItems)}
         onOpenInExplorer={(filePath) => getMediaApi().openPathInExplorer(filePath)}
+        duplicateKinds={duplicateKinds}
       />
 
       {/* Bảng chỉnh sửa chi tiết bên phải */}
@@ -317,6 +441,24 @@ export function App() {
         onClose={() => setIsSettingsModalOpen(false)}
       />
 
+      <DuplicatesModal
+        isOpen={isDuplicatesModalOpen}
+        onClose={() => setIsDuplicatesModalOpen(false)}
+        result={duplicateResult}
+        items={items}
+        isChecking={isCheckingDuplicates}
+        showLowConfidence={showLowConfidence}
+        onToggleLowConfidence={setShowLowConfidence}
+        onRescan={() => setDuplicateScanVersion((v) => v + 1)}
+        onSelectInList={(filePaths) => {
+          setSelectedPaths(new Set(filePaths));
+          setActiveFilter('duplicates');
+          setIsDuplicatesModalOpen(false);
+        }}
+        onOpenInExplorer={(filePath) => getMediaApi().openPathInExplorer(filePath)}
+        onMoveToTrash={handleMoveToTrash}
+      />
+
       {/* Overlay đang quét file */}
       {isScanning && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center">
@@ -335,11 +477,15 @@ export function App() {
           className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl border shadow-xl flex items-center gap-2.5 text-xs font-medium transition ${
             toast.type === 'success'
               ? 'bg-emerald-950/95 border-emerald-600/50 text-emerald-200'
-              : 'bg-rose-950/95 border-rose-600/50 text-rose-200'
+              : toast.type === 'warning'
+                ? 'bg-amber-950/95 border-amber-600/50 text-amber-200'
+                : 'bg-rose-950/95 border-rose-600/50 text-rose-200'
           }`}
         >
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : toast.type === 'warning' ? (
+            <Copy className="w-4 h-4 text-amber-400 shrink-0" />
           ) : (
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
           )}

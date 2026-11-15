@@ -22,8 +22,56 @@ import {
   Sparkles,
   ExternalLink,
   CheckCircle2,
+  Copy,
 } from 'lucide-react';
-import { MediaFileItem } from '../shared/types';
+import { DuplicateKind, MediaFileItem } from '../shared/types';
+
+const DUPLICATE_BADGE: Record<DuplicateKind, { label: string; title: string; tone: string }> = {
+  identical: {
+    label: 'Trùng',
+    title: 'File có nội dung giống hệt một file khác',
+    tone: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  },
+  'similar-image': {
+    label: 'Ảnh giống',
+    title: 'Hình ảnh gần giống một ảnh khác (bản resize / nén lại)',
+    tone: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+  },
+  'similar-video': {
+    label: 'Video giống',
+    title: 'Cùng thời lượng và khớp hình ảnh với một video khác (bản encode lại / khác độ phân giải)',
+    tone: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
+  },
+  'same-title': {
+    label: 'Trùng Tag',
+    title: 'Cùng bài hát / phim với một file khác (theo Tag hoặc tên Scene)',
+    tone: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  },
+  'same-duration': {
+    label: 'Cùng thời lượng',
+    title: 'Có thể trùng: cùng thời lượng với một video khác nhưng chưa khớp được hình ảnh',
+    tone: 'bg-slate-500/15 text-slate-300 border-slate-500/30 border-dashed',
+  },
+  'same-size': {
+    label: 'Cùng dung lượng',
+    title: 'Có thể trùng: cùng dung lượng chính xác với một video khác nhưng nội dung khác',
+    tone: 'bg-slate-500/15 text-slate-300 border-slate-500/30 border-dashed',
+  },
+};
+
+function renderDuplicateBadge(kind?: DuplicateKind) {
+  if (!kind) return null;
+  const b = DUPLICATE_BADGE[kind];
+  return (
+    <span
+      title={b.title}
+      className={`shrink-0 inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-semibold rounded border ${b.tone}`}
+    >
+      <Copy className="w-2.5 h-2.5" />
+      {b.label}
+    </span>
+  );
+}
 
 export type BrowseMode =
   | 'flat'
@@ -49,6 +97,8 @@ interface MediaFileListProps {
   onQuickSearchOnline: (item: MediaFileItem) => void;
   onBatchSearchGroup: (groupItems: MediaFileItem[]) => void;
   onOpenInExplorer: (filePath: string) => void;
+  /** filePath → loại trùng lặp nghiêm trọng nhất mà file thuộc về */
+  duplicateKinds?: Map<string, DuplicateKind>;
 }
 
 interface MediaGroupSection {
@@ -123,6 +173,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
   onQuickSearchOnline,
   onBatchSearchGroup,
   onOpenInExplorer,
+  duplicateKinds,
 }) => {
   const [browseMode, setBrowseMode] = useState<BrowseMode>('flat');
   const [layoutMode, setLayoutMode] = useState<LayoutViewMode>('list');
@@ -551,7 +602,10 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                 <div className="p-2.5 flex-1 flex flex-col justify-between gap-1.5">
                   <div>
                     <div className="flex items-center justify-between gap-1.5 mb-1">
-                      {renderMediaTypeBadge(item.mediaType)}
+                      <span className="flex items-center gap-1">
+                        {renderMediaTypeBadge(item.mediaType)}
+                        {renderDuplicateBadge(duplicateKinds?.get(item.filePath))}
+                      </span>
                       <span className="text-[10px] font-mono text-slate-500">
                         {formatFileSize(item.fileSize)}
                       </span>
@@ -687,6 +741,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                         <span className="truncate text-slate-200 font-medium" title={item.fileName}>
                           {item.fileName}
                         </span>
+                        {renderDuplicateBadge(duplicateKinds?.get(item.filePath))}
                       </div>
                     </td>
                     <td className="py-2 px-3 max-w-[200px]">
@@ -813,6 +868,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                       {meta.year}
                     </span>
                   )}
+                  {renderDuplicateBadge(duplicateKinds?.get(item.filePath))}
                 </div>
 
                 {/* Dòng 2: Thư mục con tương đối, Tên file thực tế & Nghệ sĩ / Album / Thông số Scene */}

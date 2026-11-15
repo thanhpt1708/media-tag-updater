@@ -160,6 +160,48 @@ export interface ExtractTagPreviewItem {
   sceneInfo?: ParsedSceneInfo;
 }
 
+/**
+ * Loại trùng lặp:
+ * - identical:     Nội dung byte giống hệt nhau (cùng kích thước + cùng hash), chỉ khác tên/vị trí
+ * - similar-image: Ảnh có nội dung hình ảnh gần giống (perceptual hash), vd: bản resize / nén lại / đổi định dạng
+ * - similar-video: Video cùng thời lượng VÀ khớp hình ảnh các khung hình mẫu (bản encode lại / khác độ phân giải)
+ * - same-title:    Cùng bài hát / cùng phim (theo Tag hoặc phân tích tên Scene) nhưng là file khác nhau
+ * - same-duration: (độ tin cậy thấp) Video cùng thời lượng nhưng chưa xác nhận được bằng hình ảnh
+ * - same-size:     (độ tin cậy thấp) Video cùng dung lượng chính xác từng byte nhưng nội dung khác
+ *                  → thường là cùng bản encode nhưng khác Tag/Poster, hoặc một bản bị hỏng
+ */
+export type DuplicateKind =
+  | 'identical'
+  | 'similar-image'
+  | 'similar-video'
+  | 'same-title'
+  | 'same-duration'
+  | 'same-size';
+
+export type DuplicateConfidence = 'high' | 'low';
+
+export interface DuplicateGroup {
+  id: string;
+  kind: DuplicateKind;
+  confidence: DuplicateConfidence;
+  mediaType: MediaType;
+  filePaths: string[];
+  reason: string;
+  /** Dung lượng có thể giải phóng nếu chỉ giữ lại 1 file lớn nhất trong nhóm */
+  reclaimableBytes: number;
+  /** Độ giống nhau thấp nhất trong nhóm (0-100), dùng cho similar-image / similar-video */
+  similarity?: number;
+}
+
+export interface DuplicateScanResult {
+  groups: DuplicateGroup[];
+  scannedCount: number;
+  hashedCount: number;
+  durationMs: number;
+  /** filePath → thời lượng video (ms) đã đọc được */
+  videoDurations: Record<string, number>;
+}
+
 export interface ElectronMediaApi {
   selectFolder: () => Promise<string | null>;
   selectFiles: () => Promise<string[]>;
@@ -196,6 +238,11 @@ export interface ElectronMediaApi {
   getBinaryStatus: () => Promise<BinaryStatusInfo>;
   installBinariesToProject: () => Promise<{ success: boolean; message: string; status: BinaryStatusInfo }>;
   openPathInExplorer: (targetPath: string) => Promise<void>;
+  findDuplicates: (items: MediaFileItem[]) => Promise<DuplicateScanResult>;
+  moveFilesToTrash: (filePaths: string[]) => Promise<{
+    trashed: string[];
+    errors: { filePath: string; error: string }[];
+  }>;
 }
 
 declare global {

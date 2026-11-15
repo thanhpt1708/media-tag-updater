@@ -23,6 +23,11 @@ import {
   installBinariesToProject,
   invalidateBinaryStatusCache,
 } from './services/binaryManagerService';
+import {
+  createFfmpegVideoTools,
+  electronImageHash,
+  findDuplicateMedia,
+} from './services/duplicateDetectionService';
 import { MediaFileItem, MediaMetadata } from '../src/shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -257,6 +262,32 @@ function registerIpcHandlers() {
 
   ipcMain.handle('media:installBinariesToProject', async () => {
     return installBinariesToProject();
+  });
+
+  ipcMain.handle('media:findDuplicates', async (_event, items: MediaFileItem[]) => {
+    const bin = getBinaryStatus();
+    const videoTools = createFfmpegVideoTools(
+      bin.ffmpegAvailable ? bin.ffmpegPath : undefined
+    );
+    return findDuplicateMedia(items, {
+      computeImageHash: electronImageHash,
+      ...videoTools,
+    });
+  });
+
+  ipcMain.handle('media:moveFilesToTrash', async (_event, filePaths: string[]) => {
+    const trashed: string[] = [];
+    const errors: { filePath: string; error: string }[] = [];
+    for (const fp of filePaths) {
+      try {
+        // Chuyển vào Thùng rác (Recycle Bin) – có thể khôi phục, không xóa vĩnh viễn
+        await shell.trashItem(fp);
+        trashed.push(fp);
+      } catch (err: any) {
+        errors.push({ filePath: fp, error: err?.message || 'Không thể chuyển vào Thùng rác' });
+      }
+    }
+    return { trashed, errors };
   });
 
   ipcMain.handle('media:openPathInExplorer', async (_event, targetPath: string) => {

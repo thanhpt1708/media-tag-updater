@@ -11,8 +11,10 @@ Thư mục `bin/` này là nơi chứa các file thực thi (`binary`) đi kèm 
 Bạn có thể chạy lệnh sau tại thư mục gốc của project:
 
 ```powershell
-npm run setup:binaries
+npm.cmd run setup:binaries
 ```
+
+*(Dùng `npm.cmd` thay vì `npm` để không bị Execution Policy của PowerShell chặn – xem giải thích ở README chính.)*
 
 Hoặc mở ứng dụng -> nhấn vào mục **Cài đặt (Settings)** -> chọn tab **Công cụ Binary (./bin)** -> nhấn nút **"Tự động Tải & Cài đặt ffmpeg.exe + exiftool.exe vào ./bin"**.
 

@@ -11,19 +11,27 @@ import {
   FileSignature,
   Settings,
   Trash2,
+  Copy,
+  Loader2,
 } from 'lucide-react';
 import { MediaFileItem, MediaType } from '../shared/types';
 
+export type SidebarFilter = 'all' | MediaType | 'missing-tag' | 'missing-thumb' | 'duplicates';
+
 interface SidebarProps {
   items: MediaFileItem[];
-  activeFilter: 'all' | MediaType | 'missing-tag' | 'missing-thumb';
-  onFilterChange: (filter: 'all' | MediaType | 'missing-tag' | 'missing-thumb') => void;
+  activeFilter: SidebarFilter;
+  onFilterChange: (filter: SidebarFilter) => void;
   onOpenFolder: () => void;
   onAddFiles: () => void;
   onClearList: () => void;
   onOpenBatchOnline: () => void;
   onOpenFilenameTool: () => void;
   onOpenSettings: () => void;
+  onOpenDuplicates: () => void;
+  duplicateFileCount: number;
+  duplicateGroupCount: number;
+  isCheckingDuplicates: boolean;
   selectedCount: number;
 }
 
@@ -37,6 +45,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenBatchOnline,
   onOpenFilenameTool,
   onOpenSettings,
+  onOpenDuplicates,
+  duplicateFileCount,
+  duplicateGroupCount,
+  isCheckingDuplicates,
   selectedCount,
 }) => {
   const audioCount = items.filter((i) => i.mediaType === 'audio').length;
@@ -46,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const missingThumbCount = items.filter((i) => !i.metadata.thumbnailDataUrl).length;
 
   const navItems: {
-    id: 'all' | MediaType | 'missing-tag' | 'missing-thumb';
+    id: SidebarFilter;
     label: string;
     count: number;
     icon: React.ReactNode;
@@ -66,6 +78,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Thiếu Thumbnail',
       count: missingThumbCount,
       icon: <AlertCircle className="w-4 h-4 text-orange-400" />,
+    },
+    {
+      id: 'duplicates',
+      label: 'File Trùng lặp',
+      count: duplicateFileCount,
+      icon: isCheckingDuplicates ? (
+        <Loader2 className="w-4 h-4 text-fuchsia-400 animate-spin" />
+      ) : (
+        <Copy className="w-4 h-4 text-fuchsia-400" />
+      ),
     },
   ];
 
@@ -170,6 +192,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="text-left">
                 <div>Tên File ↔ Tag & Scene</div>
                 <div className="text-[10px] text-slate-400">Phân tích nhóm Rip & Đổi tên</div>
+              </div>
+            </button>
+
+            <button
+              onClick={onOpenDuplicates}
+              disabled={items.length === 0}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium bg-slate-800/70 hover:bg-slate-800 text-slate-200 border border-slate-700/60 disabled:opacity-40 disabled:pointer-events-none transition"
+            >
+              {isCheckingDuplicates ? (
+                <Loader2 className="w-4 h-4 text-fuchsia-400 shrink-0 animate-spin" />
+              ) : (
+                <Copy className="w-4 h-4 text-fuchsia-400 shrink-0" />
+              )}
+              <div className="text-left flex-1">
+                <div>Quản lý File Trùng lặp</div>
+                <div className="text-[10px] text-slate-400">
+                  {isCheckingDuplicates
+                    ? 'Đang so sánh nội dung...'
+                    : duplicateGroupCount > 0
+                      ? `${duplicateGroupCount} nhóm trùng • ${duplicateFileCount} file`
+                      : 'Hash nội dung, ảnh giống nhau, cùng Tag'}
+                </div>
               </div>
             </button>
           </div>

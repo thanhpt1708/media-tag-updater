@@ -47,6 +47,18 @@
 - Chỉnh sửa trực tiếp từng trường thông tin: Tiêu đề, Ca sĩ / Nghệ sĩ, Album, Năm, Thể loại, Track No, Lời bài hát / Ghi chú,...
 - Thêm, xóa hoặc thay thế ảnh bìa bằng thao tác kéo thả ảnh trực quan.
 
+### 6. 🧬 Phát hiện Media trùng lặp
+- Tự động chạy nền mỗi khi mở thư mục / thêm file, không chặn giao diện.
+- **Trùng hoàn toàn**: lọc theo kích thước → hash mẫu (đầu/giữa/cuối) → SHA-256 toàn file (file > 512 MB so khớp 32 mẫu dữ liệu).
+- **Ảnh giống nhau**: perceptual hash (dHash) phát hiện bản resize, nén lại, đổi định dạng.
+- **Video giống nhau**: video lệch thời lượng ≤ 1 giây **và** khớp hình ảnh tại 5 khung hình mẫu (10/30/50/70/90%, trích bằng ffmpeg) → phát hiện bản encode lại, khác độ phân giải / codec.
+- **Cùng nội dung theo Tag**: cùng bài hát (Title + Artist), cùng phim (Tên + Năm), cùng tập phim (SxxExx) nhưng khác bản Release.
+- **Nhóm "có thể trùng"** (độ tin cậy thấp, mặc định ẩn – bật bằng ô *Hiện nhóm có thể trùng*):
+  - *Cùng thời lượng*: video dài từ 60 giây, cùng thời lượng nhưng hình ảnh không khớp hoặc chưa so được (vd: khác viền đen, hoặc clip camera cắt cố định).
+  - *Cùng dung lượng*: video cùng dung lượng chính xác từng byte nhưng nội dung khác (thường là cùng bản encode, khác Tag/Poster hoặc bị hỏng).
+  - Các nhóm này không được tự động đánh dấu xóa – cần tự kiểm tra.
+- Bộ lọc "File Trùng lặp", badge trên danh sách, gợi ý file nên giữ và chuyển các bản thừa vào **Thùng rác** (có thể khôi phục).
+
 ---
 
 ## 🏗️ Cấu trúc Thư mục
@@ -96,23 +108,35 @@ media-tag-updater/
 - **Node.js**: Phiên bản 18 trở lên (Khuyến nghị Node.js LTS 20+)
 - **NPM** hoặc **PNPM**
 
+> **⚠️ Lưu ý khi dùng PowerShell:** Các lệnh trong tài liệu này dùng `npm.cmd` thay vì `npm`.
+> Trên Windows, gõ `npm` trong PowerShell sẽ chạy file `npm.ps1`, file này bị chặn nếu
+> Execution Policy của máy đang ở mức mặc định `Restricted`
+> (lỗi *"running scripts is disabled on this system"*). `npm.cmd` là bản batch tương đương,
+> không bị Execution Policy kiểm soát nên chạy được mà không cần đổi cài đặt bảo mật.
+> Tương tự, dùng `npx.cmd` thay cho `npx`.
+>
+> Nếu bạn dùng **Command Prompt (cmd)**, **Git Bash**, hoặc PowerShell đã cho phép chạy script,
+> có thể gõ `npm` như bình thường.
+
 ### Bước 1: Cài đặt các thư viện phụ thuộc
 ```bash
-npm install
+npm.cmd install
 ```
 
 ### Bước 2: Cài đặt các công cụ Binary phụ trợ (FFmpeg & ExifTool)
 Để mở khóa tính năng nhúng Poster vào video MKV/AVI/MOV và ghi thông tin EXIF Tiếng Việt đầy đủ cho Ảnh, hãy chạy lệnh:
 ```bash
-npm run setup:binaries
+npm.cmd run setup:binaries
 ```
 *(Bạn cũng có thể mở tab **Cài đặt** trong ứng dụng và bấm nút **"Tự động Tải & Cài đặt"** bất kỳ lúc nào).*
 
 ### Bước 3: Khởi chạy môi trường phát triển (Dev Mode)
 ```bash
-npm run dev
+npm.cmd run dev
 ```
 Lệnh trên sẽ đồng thời khởi chạy **Vite Dev Server** (Hot Module Replacement) và **Electron** cửa sổ chính.
+Sửa code trong `src/` → giao diện cập nhật ngay; sửa code trong `electron/` → app tự khởi động lại.
+Nhấn `Ctrl+C` để dừng (nếu hiện câu hỏi `Terminate batch job (Y/N)?` thì gõ `Y`).
 
 ---
 
@@ -122,7 +146,7 @@ Lệnh trên sẽ đồng thời khởi chạy **Vite Dev Server** (Hot Module R
 
 ```bash
 # Đóng gói cả bản cài đặt (NSIS Installer) và bản chạy ngay (Portable EXE):
-npm run dist
+npm.cmd run dist
 ```
 
 File cài đặt đầu ra sẽ nằm tại thư mục:
@@ -136,14 +160,14 @@ release/
 
 ## 🧪 Kiểm thử (Testing)
 
-Dự án sử dụng **Vitest** để kiểm tra logic phân tích tên file và quy tắc đổi tên:
+Dự án sử dụng **Vitest** để kiểm tra logic phân tích tên file, quy tắc đổi tên và phát hiện file trùng lặp:
 
 ```bash
 # Chạy toàn bộ test suites
-npm run test
+npm.cmd run test
 
 # Kiểm tra kiểu dữ liệu TypeScript
-npm run typecheck
+npm.cmd run typecheck
 ```
 
 ---
