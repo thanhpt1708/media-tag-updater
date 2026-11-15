@@ -63,6 +63,8 @@ export interface MediaFileItem {
   mediaType: MediaType;
   metadata: MediaMetadata;
   sceneInfo?: ParsedSceneInfo;
+  /** Thông tin kỹ thuật đọc từ header file video (thời lượng, độ phân giải thực) */
+  videoInfo?: VideoTechInfo;
   hasEmbeddedThumbnail: boolean;
   isModified?: boolean;
 }

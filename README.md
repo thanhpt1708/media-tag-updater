@@ -39,6 +39,8 @@
   - Nguồn phim (`BluRay`, `WEBRip`, `WEB-DL`, `HDTV`,...)
   - Mùa / Tập phim (`S01E05`), tên nhóm Rip (`Release Group`), mã JAV / Creator release.
 
+- **Độ phân giải thực** của video (đọc từ luồng video, không dựa vào tên file) hiển thị ở cả 3 kiểu xem danh sách (Danh sách / Lưới / Bảng). Nếu tên file ghi khác thực tế (vd: tên ghi `1080p` nhưng video chỉ 640×360) sẽ có cảnh báo ⚠ màu đỏ.
+
 ### 4. 🏷️ Công cụ Đổi tên file hàng loạt & Batch Tagging
 - **Đổi tên file từ Tag**: Đổi tên hàng trăm file media theo khuôn mẫu định sẵn (vd: `{artist} - {title}`, `{title} ({year}) [{resolution}]`,...).
 - **Cập nhật Tag từ tên file**: Tự động bóc tách tên bài hát, ca sĩ, số thứ tự từ tên file để điền vào thẻ metadata.

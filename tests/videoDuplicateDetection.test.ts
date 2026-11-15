@@ -17,6 +17,7 @@ import {
   probeVideoInfo,
 } from '../electron/services/videoProbeService';
 import { resolutionLabel } from '../src/utils/videoFormat';
+import { readMediaFileItem } from '../electron/services/mediaTagService';
 import { MediaFileItem } from '../src/shared/types';
 
 const ffmpeg = ffmpegStatic as unknown as string;
@@ -110,6 +111,13 @@ describe('VideoProbeService - độ phân giải', () => {
     expect(await probeVideoInfo(out, ffmpeg)).toMatchObject({ width: 640, height: 360 });
   });
 
+  it('readMediaFileItem gắn sẵn độ phân giải thực cho file video khi quét', async () => {
+    const f = makeVideo('Scan.Test.2024.1080p.WEB-DL.mkv', 'testsrc', '640x360', 2);
+    const item = await readMediaFileItem(f);
+    expect(item?.videoInfo).toMatchObject({ width: 640, height: 360 });
+    expect(item?.sceneInfo?.resolution).toBe('1080p'); // tên file ghi 1080p nhưng thực tế 360p
+  });
+
   it('AVI lấy độ phân giải qua ffmpeg', async () => {
     const avi = path.join(dir, 'r.avi');
     execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=720x576:rate=25', '-t', '2', avi], {
@@ -135,6 +143,8 @@ describe('VideoProbeService - độ phân giải', () => {
     expect(resolutionLabel(1080, 1920)).toBe('1080p');
     expect(resolutionLabel(1280, 720)).toBe('720p');
     expect(resolutionLabel(854, 480)).toBe('480p');
+    expect(resolutionLabel(720, 480)).toBe('480p');
+    expect(resolutionLabel(720, 576)).toBe('576p');
     expect(resolutionLabel(320, 180)).toBe('180p');
   });
 });

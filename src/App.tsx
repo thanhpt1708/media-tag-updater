@@ -404,6 +404,7 @@ export function App() {
         onBatchSearchGroup={(groupItems) => setOnlineModalTargets(groupItems)}
         onOpenInExplorer={(filePath) => getMediaApi().openPathInExplorer(filePath)}
         duplicateKinds={duplicateKinds}
+        videoInfoMap={duplicateResult?.videoInfo}
       />
 
       {/* Bảng chỉnh sửa chi tiết bên phải */}

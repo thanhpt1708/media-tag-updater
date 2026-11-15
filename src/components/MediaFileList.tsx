@@ -23,8 +23,10 @@ import {
   ExternalLink,
   CheckCircle2,
   Copy,
+  AlertTriangle,
 } from 'lucide-react';
-import { DuplicateKind, MediaFileItem } from '../shared/types';
+import { DuplicateKind, MediaFileItem, VideoTechInfo } from '../shared/types';
+import { normalizeResolutionLabel, resolutionLabel, resolutionRank } from '../utils/videoFormat';
 
 const DUPLICATE_BADGE: Record<DuplicateKind, { label: string; title: string; tone: string }> = {
   identical: {
@@ -99,6 +101,8 @@ interface MediaFileListProps {
   onOpenInExplorer: (filePath: string) => void;
   /** filePath → loại trùng lặp nghiêm trọng nhất mà file thuộc về */
   duplicateKinds?: Map<string, DuplicateKind>;
+  /** Thông tin video bổ sung (đọc bằng ffmpeg khi quét trùng lặp) cho file không đọc được header */
+  videoInfoMap?: Record<string, VideoTechInfo>;
 }
 
 interface MediaGroupSection {
@@ -174,6 +178,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
   onBatchSearchGroup,
   onOpenInExplorer,
   duplicateKinds,
+  videoInfoMap,
 }) => {
   const [browseMode, setBrowseMode] = useState<BrowseMode>('flat');
   const [layoutMode, setLayoutMode] = useState<LayoutViewMode>('list');
@@ -494,6 +499,61 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
     );
   };
 
+  /**
+   * Badge độ phân giải: ưu tiên độ phân giải THỰC đọc từ luồng video; nếu không đọc được thì
+   * dùng nhãn trong tên file (Scene). Khi tên file ghi khác thực tế → hiện cảnh báo ⚠.
+   */
+  const renderResolutionBadge = (item: MediaFileItem, variant: 'overlay' | 'inline') => {
+    if (item.mediaType !== 'video') return null;
+    const vi = item.videoInfo?.width ? item.videoInfo : videoInfoMap?.[item.filePath];
+    const claimed = item.sceneInfo?.resolution;
+    const sizeCls =
+      variant === 'overlay' ? 'px-1.5 py-0.5 text-[10px]' : 'px-1.5 py-0.2 text-[10px]';
+
+    if (vi?.width && vi?.height) {
+      const actual = resolutionLabel(vi.width, vi.height);
+      const claimedNorm = claimed ? normalizeResolutionLabel(claimed) : undefined;
+      const mismatch = !!claimedNorm && claimedNorm !== actual;
+      const lower = mismatch && resolutionRank(actual) < resolutionRank(claimedNorm!);
+      const title = mismatch
+        ? `Tên file ghi ${claimed} nhưng video thực tế là ${vi.width}×${vi.height} (${actual})${
+            lower ? ' – thấp hơn so với tên file' : ''
+          }`
+        : `Độ phân giải thực: ${vi.width}×${vi.height}`;
+      const tone = mismatch
+        ? 'bg-rose-950/80 text-rose-300 border-rose-600/50'
+        : variant === 'overlay'
+          ? 'bg-cyan-950/90 text-cyan-200 border-cyan-600/50'
+          : 'bg-cyan-950/60 text-cyan-300 border-cyan-700/40';
+      return (
+        <span
+          title={title}
+          className={`inline-flex items-center gap-0.5 rounded border font-mono font-semibold shrink-0 ${sizeCls} ${tone}`}
+        >
+          {mismatch && <AlertTriangle className="w-2.5 h-2.5" />}
+          {actual}
+          {variant === 'inline' && (
+            <span className="font-normal opacity-60 ml-0.5">
+              {vi.width}×{vi.height}
+            </span>
+          )}
+        </span>
+      );
+    }
+
+    if (claimed) {
+      return (
+        <span
+          title="Độ phân giải theo tên file (chưa đọc được thông tin thực từ video)"
+          className={`rounded border font-mono font-semibold shrink-0 bg-amber-950/70 text-amber-300 border-amber-700/40 ${sizeCls}`}
+        >
+          {claimed}
+        </span>
+      );
+    }
+    return null;
+  };
+
   // ============================================================================
   // RENDER 3 KIỂU HIỂN THỊ: LIST (DANH SÁCH), GRID (LƯỚI POSTER), TABLE (BẢNG CỘT)
   // ============================================================================
@@ -561,11 +621,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
 
                   {/* Nhãn độ phân giải / Năm góc phải trên */}
                   <div className="absolute top-2 right-2 flex items-center gap-1">
-                    {scene?.resolution && (
-                      <span className="px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-700/50 text-[10px] font-mono font-semibold">
-                        {scene.resolution}
-                      </span>
-                    )}
+                    {renderResolutionBadge(item, 'overlay')}
                     {(meta.year || scene?.year) && (
                       <span className="px-1.5 py-0.5 rounded bg-slate-950/85 text-slate-200 border border-slate-700 text-[10px] font-mono">
                         {meta.year || scene?.year}
@@ -682,6 +738,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                     {sortField === 'year' && <ArrowUpDown className="w-3 h-3 text-indigo-400" />}
                   </div>
                 </th>
+                <th className="py-2.5 px-3 w-28">Phân giải</th>
                 <th
                   onClick={() => handleSortColumnClick('directory')}
                   className="py-2.5 px-3 cursor-pointer hover:text-slate-200"
@@ -761,6 +818,9 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                     </td>
                     <td className="py-2 px-3 font-mono text-slate-300">
                       {meta.year || item.sceneInfo?.year || <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="py-2 px-3">
+                      {renderResolutionBadge(item, 'overlay') || <span className="text-slate-600">—</span>}
                     </td>
                     <td
                       className="py-2 px-3 max-w-[160px] truncate text-[11px] text-slate-400"
@@ -911,11 +971,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                             {String(scene.episode).padStart(2, '0')}
                           </span>
                         )}
-                      {scene.resolution && (
-                        <span className="px-1.5 py-0.2 bg-amber-950/70 text-amber-300 border border-amber-700/40 rounded text-[10px] font-mono">
-                          {scene.resolution}
-                        </span>
-                      )}
+                      {renderResolutionBadge(item, 'inline')}
                       {scene.source && (
                         <span className="px-1.5 py-0.2 bg-slate-800 text-slate-300 rounded text-[10px]">
                           {scene.source}

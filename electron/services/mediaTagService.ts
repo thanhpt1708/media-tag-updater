@@ -19,6 +19,7 @@ import {
   readVideoMetadataNativeFast,
   writeVideoMetadataInPlace,
 } from './fastVideoTagEditor';
+import { probeVideoInfo } from './videoProbeService';
 
 const execFileAsync = promisify(execFile);
 
@@ -155,6 +156,18 @@ export async function readMediaFileItem(filePath: string): Promise<MediaFileItem
     metadata.releaseGroup = sceneInfo.releaseGroup;
   }
 
+  // Độ phân giải + thời lượng thực: chỉ đọc header MP4/MKV (vài KB, không gọi ffmpeg để quét nhanh).
+  // Định dạng khác (AVI...) sẽ được bổ sung từ kết quả quét trùng lặp (có dùng ffmpeg).
+  let videoInfo: MediaFileItem['videoInfo'];
+  if (mediaType === 'video') {
+    try {
+      const vi = await probeVideoInfo(filePath);
+      if (vi.width || vi.durationMs) videoInfo = vi;
+    } catch {
+      // bỏ qua
+    }
+  }
+
   return {
     id: filePath,
     filePath,
@@ -166,6 +179,7 @@ export async function readMediaFileItem(filePath: string): Promise<MediaFileItem
     mediaType,
     metadata,
     sceneInfo,
+    videoInfo,
     hasEmbeddedThumbnail,
     isModified: false,
   };
