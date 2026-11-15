@@ -5,8 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 const execFileAsync = promisify(execFile);
 
@@ -33,21 +37,60 @@ export function isPackageInstalled(pkg, binDir, installed = readInstalledVersion
   );
 }
 
-/** Tải file về `dest`, trả về sha256 (hex) */
+/**
+ * Mở luồng tải bằng node:https, tự theo chuyển hướng (SourceForge chuyển qua nhiều mirror).
+ * Không dùng fetch(): undici trong Node 24 có lỗi `assert(!this.paused)` làm crash cả tiến trình
+ * khi server đóng kết nối lúc luồng đang tạm dừng (backpressure) – gặp khi tải từ SourceForge trên CI.
+ */
+function openDownload(url, redirectsLeft = 10) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https:') ? https : http;
+    const req = client.get(
+      url,
+      // SourceForge trả 403 cho User-Agent lạ nhưng cho phép các công cụ tải phổ biến (wget/curl)
+      { headers: { 'User-Agent': 'Wget/1.21.4', Accept: '*/*' }, timeout: 60_000 },
+      (res) => {
+        const status = res.statusCode || 0;
+        if (status >= 300 && status < 400 && res.headers.location) {
+          res.resume();
+          if (redirectsLeft <= 0) return reject(new Error(`Quá nhiều lần chuyển hướng khi tải ${url}`));
+          const next = new URL(res.headers.location, url).toString();
+          return resolve(openDownload(next, redirectsLeft - 1));
+        }
+        if (status !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${status} khi tải ${url}`));
+        }
+        resolve(res);
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error(`Hết thời gian chờ khi tải ${url}`)));
+    req.on('error', reject);
+  });
+}
+
+/** Tải file về `dest`, trả về sha256 (hex). Thử lại tối đa 3 lần khi lỗi mạng. */
 async function download(url, dest) {
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} khi tải ${url}`);
-  const hash = crypto.createHash('sha256');
-  const out = fs.createWriteStream(dest);
-  try {
-    for await (const chunk of res.body) {
-      hash.update(chunk);
-      if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await openDownload(url);
+      const hash = crypto.createHash('sha256');
+      const hasher = new Transform({
+        transform(chunk, _enc, cb) {
+          hash.update(chunk);
+          cb(null, chunk);
+        },
+      });
+      await pipeline(res, hasher, fs.createWriteStream(dest));
+      return hash.digest('hex');
+    } catch (err) {
+      lastErr = err;
+      await fs.promises.rm(dest, { force: true }).catch(() => {});
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 2000 * attempt));
     }
-  } finally {
-    await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
   }
-  return hash.digest('hex');
+  throw lastErr;
 }
 
 /** Dùng bsdtar có sẵn của Windows (giải nén được .zip). Chỉ định đường dẫn tuyệt đối để
