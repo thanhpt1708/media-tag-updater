@@ -28,7 +28,14 @@ import {
   electronImageHash,
   findDuplicateMedia,
 } from './services/duplicateDetectionService';
-import { MediaFileItem, MediaMetadata } from '../src/shared/types';
+import {
+  cancelIosEncode,
+  getAvailableEncoders,
+  probeIosCompat,
+  setIosEventSink,
+  startIosEncode,
+} from './services/iosEncodeService';
+import { IosEncodeOptions, MediaFileItem, MediaMetadata } from '../src/shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -93,6 +100,33 @@ app.on('window-all-closed', () => {
 });
 
 function registerIpcHandlers() {
+  // Sự kiện chạy nền (phân tích iOS, tiến độ encode) → gửi về giao diện
+  setIosEventSink((channel, payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, payload);
+    }
+  });
+
+  ipcMain.handle('media:probeIosCompat', async (_event, filePaths: string[]) => {
+    return probeIosCompat(filePaths);
+  });
+
+  ipcMain.handle('media:getAvailableEncoders', async () => {
+    return getAvailableEncoders();
+  });
+
+  ipcMain.handle(
+    'media:startIosEncode',
+    async (_event, filePaths: string[], options: IosEncodeOptions) => {
+      saveConfig({ iosEncode: options });
+      return startIosEncode(filePaths, options);
+    }
+  );
+
+  ipcMain.handle('media:cancelIosEncode', async (_event, jobId?: string) => {
+    cancelIosEncode(jobId);
+  });
+
   ipcMain.handle('media:selectFolder', async () => {
     if (!mainWindow) return null;
     const res = await dialog.showOpenDialog(mainWindow, {

@@ -4,7 +4,6 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import ffmpegStatic from 'ffmpeg-static';
 import {
   clearDuplicateHashCache,
   compareVideoFingerprints,
@@ -20,7 +19,11 @@ import { resolutionLabel } from '../src/utils/videoFormat';
 import { readMediaFileItem } from '../electron/services/mediaTagService';
 import { MediaFileItem } from '../src/shared/types';
 
-const ffmpeg = ffmpegStatic as unknown as string;
+// ffmpeg cài bằng `npm run setup:binaries` (CI chạy bước này trước khi test)
+const ffmpeg = path.resolve(process.cwd(), 'bin', 'ffmpeg.exe');
+if (!fs.existsSync(ffmpeg)) {
+  throw new Error(`Thiếu ${ffmpeg} – chạy "npm.cmd run setup:binaries" trước khi test.`);
+}
 let dir: string;
 
 function makeVideo(name: string, source: string, size: string, seconds: number, extra: string[] = []) {

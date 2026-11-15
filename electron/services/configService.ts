@@ -13,6 +13,7 @@ const DEFAULT_CONFIG: AppConfig = {
   stashboxApiKey: '',
   includeAdultContent: true,
   customFfmpegPath: '',
+  customFfprobePath: '',
   customExiftoolPath: '',
   preferredAudioSource: 'auto',
   preferredVideoSource: 'auto',
@@ -21,6 +22,21 @@ const DEFAULT_CONFIG: AppConfig = {
     video: '{title} ({year})',
     tvShow: '{album} - S{season}E{episode} - {title}',
     image: '{date}_{location}_{title}',
+  },
+  iosEncode: {
+    uiMode: 'simple',
+    profile: 'balanced',
+    preset: 'hevc',
+    encoder: 'auto',
+    qualityMode: 'balanced',
+    quality: 24,
+    capToSourceBitrate: true,
+    maxResolution: 0,
+    skipCompatible: true,
+    outputMode: 'same-folder',
+    outputDir: '',
+    outputSuffix: '.ios',
+    afterSuccess: 'keep',
   },
 };
 
@@ -51,12 +67,20 @@ export function getConfig(): AppConfig {
           ...DEFAULT_CONFIG.defaultRenamePatterns,
           ...(parsed.defaultRenamePatterns || {}),
         },
+        iosEncode: {
+          ...DEFAULT_CONFIG.iosEncode,
+          ...(parsed.iosEncode || {}),
+        },
       };
     }
   } catch (err) {
     console.warn('Error reading config.json, using default config:', err);
   }
-  return { ...DEFAULT_CONFIG };
+  return {
+    ...DEFAULT_CONFIG,
+    defaultRenamePatterns: { ...DEFAULT_CONFIG.defaultRenamePatterns },
+    iosEncode: { ...DEFAULT_CONFIG.iosEncode },
+  };
 }
 
 export function saveConfig(partial: Partial<AppConfig>): AppConfig {
@@ -67,6 +91,10 @@ export function saveConfig(partial: Partial<AppConfig>): AppConfig {
     defaultRenamePatterns: {
       ...current.defaultRenamePatterns,
       ...(partial.defaultRenamePatterns || {}),
+    },
+    iosEncode: {
+      ...current.iosEncode,
+      ...(partial.iosEncode || {}),
     },
   };
   try {

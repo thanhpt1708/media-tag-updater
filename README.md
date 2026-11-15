@@ -68,8 +68,10 @@
 
 ```text
 media-tag-updater/
-├── bin/                          # Thư mục công cụ binary phụ trợ (ffmpeg.exe, exiftool.exe)
-│   └── README.md                 # Hướng dẫn chi tiết tải & cài đặt binary
+├── .github/workflows/
+│   └── release.yml               # CI: build & phát hành bản zip khi push tag v*
+├── bin/                          # Binary phụ trợ (sinh bởi setup:binaries, gitignore)
+│   └── README.md                 # Cấu trúc & hướng dẫn cài binary
 ├── electron/                     # Mã nguồn Electron Backend (Node.js)
 │   ├── main.ts                   # Entry point của ứng dụng Electron
 │   ├── preload.ts                # Context bridge an toàn giữa Electron & Renderer
@@ -82,7 +84,9 @@ media-tag-updater/
 │       ├── renamePatternService.ts    # Mẫu đổi tên file linh hoạt
 │       └── sceneReleaseParser.ts      # Phân tích tên file Scene Release
 ├── scripts/                      # Scripts bổ trợ build / setup
-│   └── setup-binaries.mjs        # Script tự động tải & cấu hình ./bin
+│   ├── binaries.json             # Khai báo version / URL / SHA256 của ffmpeg, exiftool
+│   ├── binary-installer.mjs      # Logic tải & kiểm tra binary (dùng chung script + app)
+│   └── setup-binaries.mjs        # Lệnh `npm run setup:binaries`
 ├── src/                          # Mã nguồn Giao diện (React + Vite + Tailwind)
 │   ├── components/               # Các UI components
 │   │   ├── FilenameToolModal.tsx # Modal đổi tên file hàng loạt
@@ -108,7 +112,7 @@ media-tag-updater/
 
 ### Yêu cầu hệ thống
 - **Hệ điều hành**: Windows 10 / 11 (64-bit)
-- **Node.js**: Phiên bản 18 trở lên (Khuyến nghị Node.js LTS 20+)
+- **Node.js**: 24 (xem file `.nvmrc`, CI dùng cùng version)
 - **NPM** hoặc **PNPM**
 
 > **⚠️ Lưu ý khi dùng PowerShell:** Các lệnh trong tài liệu này dùng `npm.cmd` thay vì `npm`.
@@ -123,15 +127,14 @@ media-tag-updater/
 
 ### Bước 1: Cài đặt các thư viện phụ thuộc
 ```bash
-npm.cmd install
+npm.cmd ci
 ```
 
-### Bước 2: Cài đặt các công cụ Binary phụ trợ (FFmpeg & ExifTool)
-Để mở khóa tính năng nhúng Poster vào video MKV/AVI/MOV và ghi thông tin EXIF Tiếng Việt đầy đủ cho Ảnh, hãy chạy lệnh:
+### Bước 2: Cài đặt các công cụ Binary phụ trợ (FFmpeg, FFprobe, ExifTool)
 ```bash
 npm.cmd run setup:binaries
 ```
-*(Bạn cũng có thể mở tab **Cài đặt** trong ứng dụng và bấm nút **"Tự động Tải & Cài đặt"** bất kỳ lúc nào).*
+Lệnh này tải đúng version khai báo trong `scripts/binaries.json` vào `./bin` (có kiểm tra SHA256), giống hệt bản dùng khi build release. Chạy lại mỗi khi `binaries.json` thay đổi – gói nào đã đúng version sẽ được bỏ qua. Chi tiết xem [bin/README.md](bin/README.md).
 
 ### Bước 3: Khởi chạy môi trường phát triển (Dev Mode)
 ```bash
@@ -145,19 +148,26 @@ Nhấn `Ctrl+C` để dừng (nếu hiện câu hỏi `Terminate batch job (Y/N)
 
 ## 📦 Đóng gói & Phát hành (Production Build)
 
-Để tạo bản cài đặt `.exe` hoàn chỉnh cho Windows:
+### Phát hành bản mới (tự động qua GitHub Actions)
 
 ```bash
-# Đóng gói cả bản cài đặt (NSIS Installer) và bản chạy ngay (Portable EXE):
+git tag v1.2.0
+```
+```bash
+git push origin v1.2.0
+```
+
+Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ: tải & kiểm tra binary → typecheck + test → đặt version `1.2.0` theo tag → build → đóng gói zip → tạo **GitHub Release** kèm `MediaTagUpdater-1.2.0-win-x64.zip` và `SHA256SUMS.txt`. Tag có hậu tố (vd `v1.2.0-rc.1`) được đánh dấu pre-release. Version trong `package.json` không cần sửa tay.
+
+Người dùng chỉ cần tải file zip, giải nén và chạy `Media Tag Updater.exe`.
+
+### Build thử ở máy local
+
+```bash
 npm.cmd run dist
 ```
 
-File cài đặt đầu ra sẽ nằm tại thư mục:
-```text
-release/
-├── Media Tag Updater Setup 1.0.0.exe      # Bộ cài đặt NSIS
-└── Media Tag Updater 1.0.0.exe            # Bản Portable chạy trực tiếp
-```
+Kết quả nằm trong `release/`: file `MediaTagUpdater-<version>-win-x64.zip` và thư mục `win-unpacked/` (chạy thử trực tiếp được).
 
 ---
 

@@ -6,9 +6,12 @@ import { OnlineSearchModal } from './components/OnlineSearchModal';
 import { FilenameToolModal } from './components/FilenameToolModal';
 import { SettingsModal } from './components/SettingsModal';
 import { DuplicatesModal } from './components/DuplicatesModal';
+import { IosEncodeModal } from './components/IosEncodeModal';
 import {
   DuplicateKind,
   DuplicateScanResult,
+  IosCompatInfo,
+  IosEncodeJobState,
   MediaFileItem,
   MediaMetadata,
 } from './shared/types';
@@ -41,6 +44,13 @@ export function App() {
   const [onlineModalTargets, setOnlineModalTargets] = useState<MediaFileItem[] | null>(null);
   const [isFilenameModalOpen, setIsFilenameModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isIosModalOpen, setIsIosModalOpen] = useState(false);
+
+  // Tương thích iPhone/iOS (ffprobe chạy nền) & hàng đợi encode
+  const [iosCompatMap, setIosCompatMap] = useState<Record<string, IosCompatInfo>>({});
+  const [iosJobsByFile, setIosJobsByFile] = useState<Record<string, IosEncodeJobState>>({});
+  const [ffprobeAvailable, setFfprobeAvailable] = useState(false);
+  const handledIosJobs = useRef(new Set<string>());
 
   const showToast = (type: 'success' | 'error' | 'warning', message: string) => {
     setToast({ type, message });
@@ -64,7 +74,77 @@ export function App() {
     if (newItems.length > 0) {
       setDuplicateScanVersion((v) => v + 1);
     }
+    requestIosCompat(newItems.filter((i) => i.mediaType === 'video').map((i) => i.filePath));
   };
+
+  /** Lấy mức tương thích iOS: cache trả ngay, phần còn lại ffprobe chạy nền rồi báo về qua sự kiện */
+  const requestIosCompat = (filePaths: string[]) => {
+    if (filePaths.length === 0) return;
+    getMediaApi()
+      .probeIosCompat(filePaths)
+      .then((cached) => {
+        if (Object.keys(cached).length > 0) setIosCompatMap((prev) => ({ ...prev, ...cached }));
+      })
+      .catch(() => {});
+  };
+
+  /** Xử lý job encode đã xong: nạp file kết quả vào danh sách, gỡ file gốc nếu đã vào Thùng rác */
+  const handleIosJobFinished = async (job: IosEncodeJobState) => {
+    if (job.sourceTrashed) {
+      setItems((prev) => prev.filter((i) => i.filePath !== job.filePath));
+      setSelectedPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(job.filePath);
+        return next;
+      });
+    }
+    if (job.outputPath) {
+      try {
+        const scanned = await getMediaApi().scanPaths([job.outputPath]);
+        mergeScannedItems(scanned);
+      } catch {
+        // bỏ qua
+      }
+    }
+  };
+  const iosJobFinishedRef = useRef(handleIosJobFinished);
+  iosJobFinishedRef.current = handleIosJobFinished;
+
+  useEffect(() => {
+    let api;
+    try {
+      api = getMediaApi();
+    } catch {
+      return;
+    }
+    api
+      .getBinaryStatus()
+      .then((s) => setFfprobeAvailable(!!s.ffprobeAvailable))
+      .catch(() => {});
+    const offCompat = api.onIosCompatUpdated((updates) => {
+      setIosCompatMap((prev) => {
+        const next = { ...prev };
+        for (const u of updates) next[u.filePath] = u.info;
+        return next;
+      });
+    });
+    const offProgress = api.onIosEncodeProgress((job) => {
+      setIosJobsByFile((prev) => ({ ...prev, [job.filePath]: job }));
+      if (job.status === 'done' && !handledIosJobs.current.has(job.jobId)) {
+        handledIosJobs.current.add(job.jobId);
+        void iosJobFinishedRef.current(job);
+        showToast('success', `Đã xong "${job.fileName}" → ${job.outputPath?.split(/[\\/]/).pop()}`);
+      } else if (job.status === 'failed' && !handledIosJobs.current.has(job.jobId)) {
+        handledIosJobs.current.add(job.jobId);
+        showToast('error', `Lỗi "${job.fileName}": ${job.message}`);
+      }
+    });
+    return () => {
+      offCompat();
+      offProgress();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Chạy nền sau mỗi lần nạp thư mục / file: so sánh nội dung để tìm file trùng lặp
   useEffect(() => {
@@ -220,6 +300,10 @@ export function App() {
       if (activeFilter === 'missing-tag' && item.metadata.title) return false;
       if (activeFilter === 'missing-thumb' && item.metadata.thumbnailDataUrl) return false;
       if (activeFilter === 'duplicates' && !duplicateKinds.has(item.filePath)) return false;
+      if (activeFilter === 'ios-incompatible') {
+        const lv = iosCompatMap[item.filePath]?.level;
+        if (item.mediaType !== 'video' || (lv !== 'remux' && lv !== 'transcode')) return false;
+      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -234,7 +318,19 @@ export function App() {
 
       return true;
     });
-  }, [items, activeFilter, searchQuery, duplicateKinds]);
+  }, [items, activeFilter, searchQuery, duplicateKinds, iosCompatMap]);
+
+  const iosStats = useMemo(() => {
+    let incompatible = 0;
+    let pending = 0;
+    for (const i of items) {
+      if (i.mediaType !== 'video') continue;
+      const lv = iosCompatMap[i.filePath]?.level;
+      if (lv === 'remux' || lv === 'transcode') incompatible++;
+      else if (!lv && ffprobeAvailable) pending++;
+    }
+    return { incompatible, pending };
+  }, [items, iosCompatMap, ffprobeAvailable]);
 
   const selectedItems = useMemo(() => {
     return items.filter((i) => selectedPaths.has(i.filePath));
@@ -335,6 +431,9 @@ export function App() {
       if (res.renamed.length > 0 && duplicateResult) {
         setDuplicateScanVersion((v) => v + 1);
       }
+      requestIosCompat(
+        res.renamed.filter((r) => r.newItem.mediaType === 'video').map((r) => r.newItem.filePath)
+      );
 
       if (res.errors.length > 0) {
         showToast(
@@ -385,6 +484,9 @@ export function App() {
         }
         isCheckingDuplicates={isCheckingDuplicates}
         selectedCount={selectedPaths.size}
+        onOpenIosEncode={() => setIsIosModalOpen(true)}
+        iosIncompatibleCount={iosStats.incompatible}
+        iosPendingCount={iosStats.pending}
       />
 
       {/* Danh sách trung tâm */}
@@ -405,6 +507,7 @@ export function App() {
         onOpenInExplorer={(filePath) => getMediaApi().openPathInExplorer(filePath)}
         duplicateKinds={duplicateKinds}
         videoInfoMap={duplicateResult?.videoInfo}
+        iosCompatMap={iosCompatMap}
       />
 
       {/* Bảng chỉnh sửa chi tiết bên phải */}
@@ -439,7 +542,32 @@ export function App() {
 
       <SettingsModal
         isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
+        onClose={() => {
+          setIsSettingsModalOpen(false);
+          // Người dùng có thể vừa thêm ffprobe / đổi đường dẫn binary
+          getMediaApi()
+            .getBinaryStatus()
+            .then((s) => {
+              setFfprobeAvailable(!!s.ffprobeAvailable);
+              if (s.ffprobeAvailable) {
+                requestIosCompat(
+                  items
+                    .filter((i) => i.mediaType === 'video' && !iosCompatMap[i.filePath])
+                    .map((i) => i.filePath)
+                );
+              }
+            })
+            .catch(() => {});
+        }}
+      />
+
+      <IosEncodeModal
+        isOpen={isIosModalOpen}
+        onClose={() => setIsIosModalOpen(false)}
+        targetItems={activeTargetsForTools}
+        iosCompatMap={iosCompatMap}
+        ffprobeAvailable={ffprobeAvailable}
+        jobsByFile={iosJobsByFile}
       />
 
       <DuplicatesModal

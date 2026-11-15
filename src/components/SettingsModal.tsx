@@ -445,6 +445,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
                   <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
                     <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-200">FFprobe (Phân tích iPhone/iOS)</span>
+                      {binaryStatus?.ffprobeAvailable ? (
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Sẵn sàng ({binaryStatus.ffprobeSource})
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[11px] text-amber-400">
+                          <AlertCircle className="w-3.5 h-3.5" /> Chưa có
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate" title={binaryStatus?.ffprobePath}>
+                      {binaryStatus?.ffprobePath ||
+                        'Đặt ffprobe.exe cạnh ffmpeg.exe (./bin) để bật badge & Encode cho iPhone'}
+                    </div>
+                    {binaryStatus?.ffprobeVersion && (
+                      <div className="text-[10px] text-slate-500 truncate">
+                        {binaryStatus.ffprobeVersion}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-200">ExifTool (Xử lý Ảnh nâng cao)</span>
                       {binaryStatus?.exiftoolAvailable ? (
                         <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
@@ -507,6 +531,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       onClick={async () => {
                         const chosen = await getMediaApi().selectBinaryFile('Chọn file ffmpeg.exe');
                         if (chosen) setConfig({ ...config, customFfmpegPath: chosen });
+                      }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded-lg border border-slate-700"
+                    >
+                      Chọn file...
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">
+                    Đường dẫn tới <code className="text-slate-200">ffprobe.exe</code> (Để trống để tự tìm cạnh{' '}
+                    <code className="text-slate-200">ffmpeg.exe</code> đang dùng, rồi trong{' '}
+                    <code className="text-slate-200">./bin/ffprobe.exe</code>)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={config.customFfprobePath || ''}
+                      onChange={(e) => setConfig({ ...config, customFfprobePath: e.target.value })}
+                      placeholder="./bin/ffprobe.exe"
+                      className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-100 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const chosen = await getMediaApi().selectBinaryFile('Chọn file ffprobe.exe');
+                        if (chosen) setConfig({ ...config, customFfprobePath: chosen });
                       }}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded-lg border border-slate-700"
                     >

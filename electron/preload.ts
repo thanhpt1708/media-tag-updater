@@ -1,5 +1,11 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import { ElectronMediaApi, MediaFileItem, MediaMetadata, AppConfig } from '../src/shared/types';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import {
+  ElectronMediaApi,
+  MediaFileItem,
+  MediaMetadata,
+  AppConfig,
+  IosEncodeOptions,
+} from '../src/shared/types';
 
 const api: ElectronMediaApi = {
   selectFolder: () => ipcRenderer.invoke('media:selectFolder'),
@@ -32,6 +38,21 @@ const api: ElectronMediaApi = {
   findDuplicates: (items: MediaFileItem[]) => ipcRenderer.invoke('media:findDuplicates', items),
   moveFilesToTrash: (filePaths: string[]) =>
     ipcRenderer.invoke('media:moveFilesToTrash', filePaths),
+  probeIosCompat: (filePaths: string[]) => ipcRenderer.invoke('media:probeIosCompat', filePaths),
+  onIosCompatUpdated: (cb) => {
+    const listener = (_e: IpcRendererEvent, updates: any) => cb(updates);
+    ipcRenderer.on('media:iosCompatUpdated', listener);
+    return () => ipcRenderer.removeListener('media:iosCompatUpdated', listener);
+  },
+  getAvailableEncoders: () => ipcRenderer.invoke('media:getAvailableEncoders'),
+  startIosEncode: (filePaths: string[], options: IosEncodeOptions) =>
+    ipcRenderer.invoke('media:startIosEncode', filePaths, options),
+  cancelIosEncode: (jobId?: string) => ipcRenderer.invoke('media:cancelIosEncode', jobId),
+  onIosEncodeProgress: (cb) => {
+    const listener = (_e: IpcRendererEvent, job: any) => cb(job);
+    ipcRenderer.on('media:iosEncodeProgress', listener);
+    return () => ipcRenderer.removeListener('media:iosEncodeProgress', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('mediaApi', api);

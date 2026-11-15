@@ -13,10 +13,17 @@ import {
   Trash2,
   Copy,
   Loader2,
+  Smartphone,
 } from 'lucide-react';
 import { MediaFileItem, MediaType } from '../shared/types';
 
-export type SidebarFilter = 'all' | MediaType | 'missing-tag' | 'missing-thumb' | 'duplicates';
+export type SidebarFilter =
+  | 'all'
+  | MediaType
+  | 'missing-tag'
+  | 'missing-thumb'
+  | 'duplicates'
+  | 'ios-incompatible';
 
 interface SidebarProps {
   items: MediaFileItem[];
@@ -33,6 +40,11 @@ interface SidebarProps {
   duplicateGroupCount: number;
   isCheckingDuplicates: boolean;
   selectedCount: number;
+  onOpenIosEncode: () => void;
+  /** Số video chưa tương thích iPhone (cần remux hoặc encode) */
+  iosIncompatibleCount: number;
+  /** Số video đang chờ phân tích */
+  iosPendingCount: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -50,6 +62,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   duplicateGroupCount,
   isCheckingDuplicates,
   selectedCount,
+  onOpenIosEncode,
+  iosIncompatibleCount,
+  iosPendingCount,
 }) => {
   const audioCount = items.filter((i) => i.mediaType === 'audio').length;
   const videoCount = items.filter((i) => i.mediaType === 'video').length;
@@ -88,6 +103,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ) : (
         <Copy className="w-4 h-4 text-fuchsia-400" />
       ),
+    },
+    {
+      id: 'ios-incompatible',
+      label: 'Chưa hợp iPhone',
+      count: iosIncompatibleCount,
+      icon:
+        iosPendingCount > 0 ? (
+          <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
+        ) : (
+          <Smartphone className="w-4 h-4 text-orange-400" />
+        ),
     },
   ];
 
@@ -213,6 +239,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : duplicateGroupCount > 0
                       ? `${duplicateGroupCount} nhóm trùng • ${duplicateFileCount} file`
                       : 'Hash nội dung, ảnh giống nhau, cùng Tag'}
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={onOpenIosEncode}
+              disabled={videoCount === 0}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium bg-slate-800/70 hover:bg-slate-800 text-slate-200 border border-slate-700/60 disabled:opacity-40 disabled:pointer-events-none transition"
+            >
+              <Smartphone className="w-4 h-4 text-orange-400 shrink-0" />
+              <div className="text-left flex-1">
+                <div>Encode cho iPhone</div>
+                <div className="text-[10px] text-slate-400">
+                  {iosPendingCount > 0
+                    ? `Đang phân tích ${iosPendingCount} video...`
+                    : iosIncompatibleCount > 0
+                      ? `${iosIncompatibleCount} video cần remux / encode`
+                      : 'HEVC / H.264 MP4 giải mã phần cứng'}
                 </div>
               </div>
             </button>

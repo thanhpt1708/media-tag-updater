@@ -25,8 +25,9 @@ import {
   Copy,
   AlertTriangle,
 } from 'lucide-react';
-import { DuplicateKind, MediaFileItem, VideoTechInfo } from '../shared/types';
+import { DuplicateKind, IosCompatInfo, MediaFileItem, VideoTechInfo } from '../shared/types';
 import { normalizeResolutionLabel, resolutionLabel, resolutionRank } from '../utils/videoFormat';
+import { IosCompatBadge } from './IosCompatBadge';
 
 const DUPLICATE_BADGE: Record<DuplicateKind, { label: string; title: string; tone: string }> = {
   identical: {
@@ -103,6 +104,8 @@ interface MediaFileListProps {
   duplicateKinds?: Map<string, DuplicateKind>;
   /** Thông tin video bổ sung (đọc bằng ffmpeg khi quét trùng lặp) cho file không đọc được header */
   videoInfoMap?: Record<string, VideoTechInfo>;
+  /** filePath → mức tương thích iPhone/iOS (phân tích bằng ffprobe chạy nền) */
+  iosCompatMap?: Record<string, IosCompatInfo>;
 }
 
 interface MediaGroupSection {
@@ -179,7 +182,13 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
   onOpenInExplorer,
   duplicateKinds,
   videoInfoMap,
+  iosCompatMap,
 }) => {
+  const renderIosBadge = (item: MediaFileItem) =>
+    item.mediaType === 'video' ? (
+      <IosCompatBadge info={iosCompatMap?.[item.filePath]} />
+    ) : null;
+
   const [browseMode, setBrowseMode] = useState<BrowseMode>('flat');
   const [layoutMode, setLayoutMode] = useState<LayoutViewMode>('list');
   const [sortField, setSortField] = useState<SortField>('fileName');
@@ -661,6 +670,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                       <span className="flex items-center gap-1">
                         {renderMediaTypeBadge(item.mediaType)}
                         {renderDuplicateBadge(duplicateKinds?.get(item.filePath))}
+                        {renderIosBadge(item)}
                       </span>
                       <span className="text-[10px] font-mono text-slate-500">
                         {formatFileSize(item.fileSize)}
@@ -799,6 +809,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                           {item.fileName}
                         </span>
                         {renderDuplicateBadge(duplicateKinds?.get(item.filePath))}
+                        {renderIosBadge(item)}
                       </div>
                     </td>
                     <td className="py-2 px-3 max-w-[200px]">
@@ -929,6 +940,7 @@ export const MediaFileList: React.FC<MediaFileListProps> = ({
                     </span>
                   )}
                   {renderDuplicateBadge(duplicateKinds?.get(item.filePath))}
+                  {renderIosBadge(item)}
                 </div>
 
                 {/* Dòng 2: Thư mục con tương đối, Tên file thực tế & Nghệ sĩ / Album / Thông số Scene */}

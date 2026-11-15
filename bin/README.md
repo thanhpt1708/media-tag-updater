@@ -1,61 +1,60 @@
-# Hướng dẫn Cài đặt Công cụ Binary (`ffmpeg.exe` & `exiftool.exe`)
+# Thư mục `bin/` – Công cụ Binary đi kèm
 
-Thư mục `bin/` này là nơi chứa các file thực thi (`binary`) đi kèm với dự án **Media Tag Updater** để hỗ trợ đọc/ghi Metadata và nhúng Thumbnail (Poster/Cover Art) nâng cao cho mọi định dạng Phim (`.mkv`, `.mp4`, `.mov`, `.avi`) và Ảnh (`.jpg`, `.png`, `.webp`, `.heic`, `.tiff`).
+Thư mục này chứa các file thực thi mà **Media Tag Updater** dùng để đọc/ghi metadata, nhúng Poster và encode video. Nội dung được sinh tự động (đã gitignore, trừ file README này) theo khai báo trong [`scripts/binaries.json`](../scripts/binaries.json):
 
-> **Lưu ý**: Ngay cả khi thư mục `bin/` chưa có 2 file này, ứng dụng **vẫn hoạt động bình thường** nhờ các thư viện tích hợp sẵn (`node-taglib-sharp`, `piexifjs`, `exifreader`, và gói `ffmpeg-static` trong `node_modules`). Tuy nhiên, việc đặt `ffmpeg.exe` và `exiftool.exe` vào `./bin/` sẽ mở khóa khả năng tương thích tối đa (đặc biệt với EXIF/XMP/IPTC tiếng Việt trên ảnh PNG/WebP và nhúng Poster chuẩn vào MKV/AVI/MOV).
+```text
+bin/
+├── ffmpeg.exe                 # FFmpeg bản chính (gyan.dev essentials)
+├── ffprobe.exe                # FFprobe cùng bản với ffmpeg chính
+├── ffmpeg-compat/
+│   └── ffmpeg.exe             # FFmpeg bản cũ (NVENC SDK cũ) – dự phòng cho GPU/driver đời cũ
+├── exiftool.exe               # ExifTool (bản Windows 64-bit)
+├── exiftool_files/            # Perl runtime + thư viện đi kèm ExifTool
+├── licenses/                  # License của FFmpeg
+└── .versions.json             # Đánh dấu version đã cài (script dùng để biết có cần tải lại không)
+```
+
+Khi đóng gói, toàn bộ các file trên được chép vào `resources\bin\` của bản phát hành.
 
 ---
 
-## Cách 1: Cài đặt Tự động bằng Lệnh hoặc Giao diện Ứng dụng (Khuyên dùng)
+## Cài đặt (khuyên dùng)
 
-Bạn có thể chạy lệnh sau tại thư mục gốc của project:
+Tại thư mục gốc của project:
 
 ```powershell
 npm.cmd run setup:binaries
 ```
 
-*(Dùng `npm.cmd` thay vì `npm` để không bị Execution Policy của PowerShell chặn – xem giải thích ở README chính.)*
+Script sẽ:
+1. Tải đúng version khai báo trong `scripts/binaries.json` (FFmpeg từ GitHub `GyanD/codexffmpeg`, ExifTool từ SourceForge).
+2. Kiểm tra SHA256 của từng gói, sai thì dừng.
+3. Giải nén vào `./bin` và chạy kiểm tra (version, danh sách encoder `libx264/libx265/nvenc/qsv/amf`).
+4. Thoát với mã lỗi nếu có bước nào thất bại.
 
-Hoặc mở ứng dụng -> nhấn vào mục **Cài đặt (Settings)** -> chọn tab **Công cụ Binary (./bin)** -> nhấn nút **"Tự động Tải & Cài đặt ffmpeg.exe + exiftool.exe vào ./bin"**.
+Các lệnh khác:
 
-Script sẽ tự động:
-1. Sao chép `ffmpeg.exe` từ gói `ffmpeg-static` vào `./bin/ffmpeg.exe`.
-2. Tải bản `exiftool` chính thức cho Windows và giải nén `exiftool.exe` (kèm thư mục `exiftool_files` nếu có) vào `./bin/exiftool.exe`.
-
----
-
-## Cách 2: Cài đặt Thủ công (Tự tải và chép vào thư mục `./bin/`)
-
-Nếu máy của bạn hạn chế kết nối mạng khi chạy script, bạn có thể tự tải và đặt file theo cấu trúc tương đối của dự án như sau:
-
-```text
-<thư-mục-project>/
-└── bin/
-    ├── ffmpeg.exe
-    ├── exiftool.exe
-    └── exiftool_files/   (thư mục phụ thuộc đi kèm bản ExifTool mới)
+```powershell
+npm.cmd run setup:binaries -- --force   # tải lại toàn bộ
+npm.cmd run verify:binaries             # chỉ kiểm tra, không tải
 ```
 
-### 1. Tải và đặt `ffmpeg.exe`
-1. Truy cập trang tải chính thức cho Windows:
-   - [https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip)
-   - Hoặc bản build từ GitHub: [https://github.com/BtbN/FFmpeg-Builds/releases](https://github.com/BtbN/FFmpeg-Builds/releases)
-2. Giải nén file `.zip` vừa tải về, mở thư mục `bin/` bên trong file giải nén.
-3. Sao chép file **`ffmpeg.exe`** vào thư mục **`./bin/ffmpeg.exe`** của project.
+Gói nào đã đúng version thì được bỏ qua, nên khi ai đó nâng version trong `binaries.json`, chỉ cần chạy lại lệnh trên.
 
-### 2. Tải và đặt `exiftool.exe`
-1. Truy cập trang chủ ExifTool của Phil Harvey:
-   - [https://exiftool.org/](https://exiftool.org/) (Chọn bản **Windows Executable 64-bit** `exiftool-xx.xx_64.zip`).
-2. Giải nén file `.zip` vừa tải về.
-3. Bên trong thư mục giải nén sẽ có file `exiftool(-k).exe` và thư mục `exiftool_files`:
-   - Đổi tên **`exiftool(-k).exe`** thành **`exiftool.exe`**.
-   - Sao chép cả file **`exiftool.exe`** và thư mục **`exiftool_files`** vào trong thư mục **`./bin/`** của project.
+Trong ứng dụng: **Cài đặt → Công cụ Binary → "Tự động Tải & Cài đặt"** dùng cùng logic này.
 
----
+## Vì sao có 2 bản FFmpeg?
 
-## Cách 3: Trỏ đường dẫn tới Binary đã có sẵn trên máy
+Encoder GPU (NVENC/QSV/AMF) phụ thuộc vào phiên bản SDK mà FFmpeg được build kèm. FFmpeg mới đòi driver GPU mới; GPU đời cũ (vd GTX 10xx) bị dừng ở driver cũ nên không chạy được NVENC với bản mới. Khi dò encoder, app thử bản chính trước, sau đó tới `ffmpeg-compat`, và nhớ bản nào chạy được. Nếu cả hai đều không dùng được GPU, app dùng `libx265`/`libx264` (CPU).
 
-Nếu bạn đã lưu `ffmpeg.exe` hoặc `exiftool.exe` ở một thư mục khác trên ổ cứng Windows:
-1. Mở ứng dụng **Media Tag Updater** -> vào **Cài đặt (Settings)**.
-2. Tại mục **Đường dẫn FFmpeg** / **Đường dẫn ExifTool**, nhấn nút **Chọn file...** và trỏ tới file `.exe` tương ứng.
-3. Nhấn **Kiểm tra lại** để xác nhận phiên bản.
+## Nâng version binary
+
+1. Chọn bản mới, tải file zip và tính SHA256 (`Get-FileHash <file> -Algorithm SHA256`).
+2. Sửa `version`, `url`, `sha256`, các đường dẫn `from` và chuỗi `expect` trong `scripts/binaries.json`.
+3. Chạy `npm.cmd run setup:binaries`, rồi test encode trên cả máy GPU đời mới và đời cũ.
+
+## Cài thủ công (khi không có mạng)
+
+Tải các gói theo URL trong `scripts/binaries.json`, giải nén và đặt file đúng cấu trúc ở trên (với ExifTool: đổi tên `exiftool(-k).exe` thành `exiftool.exe`, chép kèm thư mục `exiftool_files`). Sau đó chạy `npm.cmd run verify:binaries` để kiểm tra.
+
+Hoặc trỏ tới binary có sẵn trên máy: **Cài đặt → Đường dẫn FFmpeg / ExifTool → Chọn file...**

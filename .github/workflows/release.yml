@@ -1,0 +1,95 @@
+name: Release
+
+# Push một tag dạng v1.2.3 (hoặc v1.2.3-rc.1 → đánh dấu pre-release) để build bản zip cho Windows
+# và tạo GitHub Release kèm file tải về.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lấy version từ tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $tag = $env:TAG
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$') {
+            Write-Error "Tag '$tag' không đúng dạng vX.Y.Z hoặc vX.Y.Z-suffix"
+            exit 1
+          }
+          "version=$($Matches[1])" >> $env:GITHUB_OUTPUT
+          "prerelease=$(if ($Matches[2]) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Cài dependencies
+        run: npm ci
+
+      - name: Cache binary (ffmpeg / exiftool)
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: bin-${{ runner.os }}-${{ hashFiles('scripts/binaries.json', 'scripts/binary-installer.mjs') }}
+
+      - name: Tải & kiểm tra binary
+        run: npm run setup:binaries
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Đặt version ${{ steps.version.outputs.version }}
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Build
+        run: npm run build
+
+      - name: Đóng gói zip
+        run: npx electron-builder --win --publish never
+
+      - name: Tạo SHA256SUMS.txt
+        run: |
+          Get-ChildItem release -Filter *.zip |
+            ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
+            Out-File release/SHA256SUMS.txt -Encoding ascii
+          Get-Content release/SHA256SUMS.txt
+
+      - name: Tạo GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Media Tag Updater ${{ github.ref_name }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          generate_release_notes: true
+          body: |
+            ## Cách dùng
+            1. Tải file `MediaTagUpdater-${{ steps.version.outputs.version }}-win-x64.zip`.
+            2. **Giải nén** ra một thư mục có quyền ghi (ví dụ `D:\Apps\MediaTagUpdater`), không chạy trực tiếp từ trong file zip.
+            3. Chạy `Media Tag Updater.exe`. Nếu Windows SmartScreen cảnh báo, chọn **More info → Run anyway**.
+
+            Đã kèm sẵn FFmpeg, FFprobe và ExifTool trong `resources\bin` (license tại `resources\bin\licenses` và `resources\bin\exiftool_files\LICENSE`).
+          files: |
+            release/*.zip
+            release/SHA256SUMS.txt
+          fail_on_unmatched_files: true

@@ -10,8 +10,7 @@ release/
 build/
 
 # Binary tools (downloaded/extracted via `npm run setup:binaries`)
-bin/*.exe
-bin/exiftool_files/
+bin/*
 !bin/README.md
 !bin/.gitkeep
 

@@ -1,0 +1,63 @@
+{
+  "$comment": "Danh sách binary đóng gói vào ./bin. Muốn nâng version: sửa version + url + sha256 + đường dẫn 'from', rồi chạy `npm.cmd run setup:binaries`. CI dùng hash của file này làm cache key.",
+  "packages": [
+    {
+      "id": "ffmpeg",
+      "name": "FFmpeg (bản chính)",
+      "version": "9.0.2",
+      "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+      "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+      "files": [
+        { "from": "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe", "to": "ffmpeg.exe" },
+        { "from": "ffmpeg-9.0.2-essentials_build/bin/ffprobe.exe", "to": "ffprobe.exe" },
+        { "from": "ffmpeg-9.0.2-essentials_build/LICENSE", "to": "licenses/ffmpeg-9.0.2-LICENSE.txt" }
+      ],
+      "verify": [
+        { "exe": "ffmpeg.exe", "args": ["-hide_banner", "-version"], "expect": ["ffmpeg version 9.0.2"] },
+        {
+          "exe": "ffmpeg.exe",
+          "args": ["-hide_banner", "-encoders"],
+          "expect": ["libx264", "libx265", "h264_nvenc", "hevc_nvenc", "h264_qsv", "hevc_qsv", "h264_amf", "hevc_amf"]
+        },
+        { "exe": "ffmpeg.exe", "args": ["-hide_banner", "-filters"], "expect": ["scale_cuda", "hwupload_cuda"] },
+        { "exe": "ffprobe.exe", "args": ["-hide_banner", "-version"], "expect": ["ffprobe version 9.0.2"] }
+      ]
+    },
+    {
+      "id": "ffmpeg-compat",
+      "name": "FFmpeg tương thích (NVENC SDK cũ, cho GPU/driver đời cũ)",
+      "version": "6.1.1",
+      "url": "https://github.com/GyanD/codexffmpeg/releases/download/6.1.1/ffmpeg-6.1.1-essentials_build.zip",
+      "sha256": "742e32fc9f92681f9f254b925e1b613fdd8074ba40749d4879aefdb009b94cc5",
+      "files": [
+        { "from": "ffmpeg-6.1.1-essentials_build/bin/ffmpeg.exe", "to": "ffmpeg-compat/ffmpeg.exe" },
+        { "from": "ffmpeg-6.1.1-essentials_build/LICENSE", "to": "licenses/ffmpeg-6.1.1-LICENSE.txt" }
+      ],
+      "verify": [
+        { "exe": "ffmpeg-compat/ffmpeg.exe", "args": ["-hide_banner", "-version"], "expect": ["ffmpeg version 6.1.1"] },
+        {
+          "exe": "ffmpeg-compat/ffmpeg.exe",
+          "args": ["-hide_banner", "-encoders"],
+          "expect": ["libx264", "libx265", "h264_nvenc", "hevc_nvenc", "h264_qsv", "hevc_qsv", "h264_amf", "hevc_amf"]
+        },
+        {
+          "exe": "ffmpeg-compat/ffmpeg.exe",
+          "args": ["-hide_banner", "-filters"],
+          "expect": ["scale_cuda", "hwupload_cuda"]
+        }
+      ]
+    },
+    {
+      "id": "exiftool",
+      "name": "ExifTool",
+      "version": "13.61",
+      "url": "https://sourceforge.net/projects/exiftool/files/exiftool-13.61_64.zip/download",
+      "sha256": "ab75b37515385a753aa60a58f68ffffe1ff81e43b319df9540978fb19e0580e5",
+      "files": [
+        { "from": "exiftool-13.61_64/exiftool(-k).exe", "to": "exiftool.exe" },
+        { "from": "exiftool-13.61_64/exiftool_files", "to": "exiftool_files" }
+      ],
+      "verify": [{ "exe": "exiftool.exe", "args": ["-ver"], "expect": ["13.61"] }]
+    }
+  ]
+}
