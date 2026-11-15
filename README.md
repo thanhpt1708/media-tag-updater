@@ -57,6 +57,7 @@
   - *Cùng thời lượng*: video dài từ 60 giây, cùng thời lượng nhưng hình ảnh không khớp hoặc chưa so được (vd: khác viền đen, hoặc clip camera cắt cố định).
   - *Cùng dung lượng*: video cùng dung lượng chính xác từng byte nhưng nội dung khác (thường là cùng bản encode, khác Tag/Poster hoặc bị hỏng).
   - Các nhóm này không được tự động đánh dấu xóa – cần tự kiểm tra.
+- Với video, mỗi file hiển thị **độ phân giải** (nhãn 4K / 1080p / 720p... kèm kích thước thực như `1920×1080`) và thời lượng; bản nét nhất trong nhóm được tô xanh và được ưu tiên gợi ý giữ lại. Độ phân giải đọc từ chính luồng video, không dựa vào tên file.
 - Bộ lọc "File Trùng lặp", badge trên danh sách, gợi ý file nên giữ và chuyển các bản thừa vào **Thùng rác** (có thể khôi phục).
 
 ---

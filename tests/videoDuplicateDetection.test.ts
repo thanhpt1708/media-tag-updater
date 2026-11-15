@@ -11,7 +11,12 @@ import {
   createFfmpegVideoTools,
   findDuplicateMedia,
 } from '../electron/services/duplicateDetectionService';
-import { probeVideoDurationMs } from '../electron/services/videoProbeService';
+import {
+  parseFfmpegProbeOutput,
+  probeVideoDurationMs,
+  probeVideoInfo,
+} from '../electron/services/videoProbeService';
+import { resolutionLabel } from '../src/utils/videoFormat';
 import { MediaFileItem } from '../src/shared/types';
 
 const ffmpeg = ffmpegStatic as unknown as string;
@@ -82,6 +87,58 @@ describe('VideoProbeService - đọc thời lượng', () => {
   });
 });
 
+describe('VideoProbeService - độ phân giải', () => {
+  it('đọc độ phân giải từ header MP4 (tkhd) và MKV (Tracks/Video)', async () => {
+    const mp4 = makeVideo('r.mp4', 'testsrc', '1280x720', 2);
+    const mkv = makeVideo('r.mkv', 'testsrc', '854x480', 2);
+    expect(await probeVideoInfo(mp4)).toMatchObject({ width: 1280, height: 720 });
+    expect(await probeVideoInfo(mkv)).toMatchObject({ width: 854, height: 480 });
+  });
+
+  it('MP4 có Poster nhúng vẫn lấy đúng độ phân giải của luồng video', async () => {
+    const src = makeVideo('poster-src.mp4', 'testsrc', '640x360', 2);
+    const cover = path.join(dir, 'cover.jpg');
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=red:size=1000x1500', '-frames:v', '1', cover], {
+      windowsHide: true,
+    });
+    const out = path.join(dir, 'with-poster.mp4');
+    execFileSync(
+      ffmpeg,
+      ['-v', 'error', '-y', '-i', src, '-i', cover, '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:1', 'attached_pic', out],
+      { windowsHide: true }
+    );
+    expect(await probeVideoInfo(out, ffmpeg)).toMatchObject({ width: 640, height: 360 });
+  });
+
+  it('AVI lấy độ phân giải qua ffmpeg', async () => {
+    const avi = path.join(dir, 'r.avi');
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=720x576:rate=25', '-t', '2', avi], {
+      windowsHide: true,
+    });
+    expect(await probeVideoInfo(avi, ffmpeg)).toMatchObject({ width: 720, height: 576 });
+  });
+
+  it('bỏ qua luồng ảnh bìa (attached pic) khi phân tích output ffmpeg', () => {
+    const out = [
+      '  Duration: 01:02:03.50, start: 0.000000, bitrate: 5000 kb/s',
+      '  Stream #0:0: Video: mjpeg (Baseline), yuvj420p(pc), 1000x1500, 90k tbr (attached pic)',
+      '  Stream #0:1(eng): Video: hevc (Main 10), yuv420p10le(tv), 3840x1608 [SAR 1:1 DAR 160:67], 23.98 fps',
+    ].join('\n');
+    expect(parseFfmpegProbeOutput(out)).toEqual({ durationMs: 3723500, width: 3840, height: 1608 });
+  });
+
+  it('gắn nhãn độ phân giải đúng cả với video cắt viền / 4:3 / quay dọc', () => {
+    expect(resolutionLabel(3840, 1608)).toBe('4K');
+    expect(resolutionLabel(1920, 1080)).toBe('1080p');
+    expect(resolutionLabel(1920, 800)).toBe('1080p');
+    expect(resolutionLabel(1440, 1080)).toBe('1080p');
+    expect(resolutionLabel(1080, 1920)).toBe('1080p');
+    expect(resolutionLabel(1280, 720)).toBe('720p');
+    expect(resolutionLabel(854, 480)).toBe('480p');
+    expect(resolutionLabel(320, 180)).toBe('180p');
+  });
+});
+
 describe('DuplicateDetectionService - video', () => {
   it('nhận ra bản encode lại khác độ phân giải là "Video giống nhau"', async () => {
     const hi = makeVideo('Movie.1080p.mkv', 'testsrc', '640x360', 12);
@@ -94,7 +151,9 @@ describe('DuplicateDetectionService - video', () => {
     expect([...similar[0].filePaths].sort()).toEqual([hi, lo].sort());
     expect(similar[0].confidence).toBe('high');
     expect(similar[0].filePaths[0]).toBe(hi); // file lớn hơn đứng đầu
-    expect(Object.keys(res.videoDurations)).toHaveLength(3);
+    expect(Object.keys(res.videoInfo)).toHaveLength(3);
+    expect(res.videoInfo[hi]).toMatchObject({ width: 640, height: 360 });
+    expect(res.videoInfo[lo]).toMatchObject({ width: 320, height: 180 });
     // Video dưới 60 giây khác nội dung → không bị xếp vào nhóm "có thể trùng"
     expect(res.groups.some((g) => g.kind === 'same-duration')).toBe(false);
   }, 60_000);

@@ -8,11 +8,12 @@ import {
   DuplicateScanResult,
   MediaFileItem,
   MediaType,
+  VideoTechInfo,
 } from '../../src/shared/types';
 import {
   VIDEO_FRAME_POSITIONS,
   extractGrayFrame9x8,
-  probeVideoDurationMs,
+  probeVideoInfo,
 } from './videoProbeService';
 
 /**
@@ -52,13 +53,13 @@ const VIDEO_MATCH_RATIO = 0.6;
 export type ImageHashFn = (filePath: string) => Promise<string | null>;
 /** Trả về danh sách dHash (hex 16 ký tự, '' nếu khung hình lỗi) theo VIDEO_FRAME_POSITIONS */
 export type VideoFingerprintFn = (filePath: string, durationMs: number) => Promise<string[] | null>;
-export type VideoDurationFn = (filePath: string) => Promise<number | null>;
+export type VideoInfoFn = (filePath: string) => Promise<VideoTechInfo | null>;
 
 export interface FindDuplicatesOptions {
   /** Hàm tính perceptual hash (hex 16 ký tự) cho ảnh. Không truyền → bỏ qua tầng similar-image */
   computeImageHash?: ImageHashFn;
-  /** Hàm đọc thời lượng video. Không truyền → bỏ qua tầng similar-video / same-duration */
-  probeVideoDuration?: VideoDurationFn;
+  /** Hàm đọc thời lượng + độ phân giải video. Không truyền → bỏ qua tầng similar-video / same-duration */
+  probeVideoInfo?: VideoInfoFn;
   /** Hàm trích dấu vân tay khung hình video. Không truyền → mọi video cùng thời lượng chỉ ở mức "có thể trùng" */
   computeVideoFingerprint?: VideoFingerprintFn;
   imageHammingThreshold?: number;
@@ -67,11 +68,11 @@ export interface FindDuplicatesOptions {
 
 /** Tạo các hàm đọc thời lượng / trích khung hình video dựa trên ffmpeg */
 export function createFfmpegVideoTools(ffmpegPath?: string): {
-  probeVideoDuration: VideoDurationFn;
+  probeVideoInfo: VideoInfoFn;
   computeVideoFingerprint?: VideoFingerprintFn;
 } {
   return {
-    probeVideoDuration: (fp) => probeVideoDurationMs(fp, ffmpegPath),
+    probeVideoInfo: (fp) => probeVideoInfo(fp, ffmpegPath),
     computeVideoFingerprint: ffmpegPath
       ? async (fp, durationMs) => {
           const frames = await Promise.all(
@@ -519,21 +520,21 @@ export async function findDuplicateMedia(
   }
 
   // ---- Tầng 3: video cùng thời lượng (+ xác nhận bằng hình ảnh) -------------
-  const videoDurations: Record<string, number> = {};
-  if (options.probeVideoDuration) {
+  const videoInfo: Record<string, VideoTechInfo> = {};
+  if (options.probeVideoInfo) {
     const videos: { item: DuplicateInput; dur: number }[] = [];
     for (const v of list.filter((i) => i.mediaType === 'video')) {
       try {
         await yieldToEventLoop();
-        const d = await cached('dur', v, async () => {
-          const ms = await options.probeVideoDuration!(v.filePath);
-          return ms ? String(ms) : null;
+        const json = await cached('vinfo', v, async () => {
+          const r = await options.probeVideoInfo!(v.filePath);
+          return r && (r.durationMs || r.width) ? JSON.stringify(r) : null;
         });
-        const ms = d ? Number(d) : 0;
-        if (ms > 0) {
-          videoDurations[v.filePath] = ms;
-          if (ms >= MIN_VIDEO_DURATION_MS) videos.push({ item: v, dur: ms });
-        }
+        if (!json) continue;
+        const info = JSON.parse(json) as VideoTechInfo;
+        videoInfo[v.filePath] = info;
+        const ms = info.durationMs || 0;
+        if (ms >= MIN_VIDEO_DURATION_MS) videos.push({ item: v, dur: ms });
       } catch {
         // bỏ qua
       }
@@ -707,7 +708,7 @@ export async function findDuplicateMedia(
     scannedCount: list.length,
     hashedCount,
     durationMs: Date.now() - startedAt,
-    videoDurations,
+    videoInfo,
   };
 }
 

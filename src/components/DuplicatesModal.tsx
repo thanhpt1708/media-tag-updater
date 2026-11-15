@@ -13,7 +13,14 @@ import {
   Loader2,
   Crown,
 } from 'lucide-react';
-import { DuplicateGroup, DuplicateKind, DuplicateScanResult, MediaFileItem } from '../shared/types';
+import {
+  DuplicateGroup,
+  DuplicateKind,
+  DuplicateScanResult,
+  MediaFileItem,
+  VideoTechInfo,
+} from '../shared/types';
+import { resolutionLabel } from '../utils/videoFormat';
 
 interface DuplicatesModalProps {
   isOpen: boolean;
@@ -71,19 +78,29 @@ function formatFileSize(bytes: number): string {
   return `${(mb / 1024).toFixed(2)} GB`;
 }
 
+function pixelCount(info?: VideoTechInfo): number {
+  return info?.width && info?.height ? info.width * info.height : 0;
+}
+
 /**
  * Chọn file "nên giữ" trong nhóm – dùng CÙNG một quy tắc cho mọi loại nhóm để một file
  * không bị gợi ý "Giữ" ở nhóm này nhưng lại bị đánh dấu xóa ở nhóm khác:
- * dung lượng lớn nhất (chất lượng cao hơn) → đường dẫn ngắn nhất (thường là bản gốc) → file cũ nhất.
- * Với nhóm identical mọi file cùng kích thước nên thực chất là chọn đường dẫn ngắn nhất.
+ * độ phân giải cao nhất (video) → dung lượng lớn nhất (chất lượng cao hơn)
+ * → đường dẫn ngắn nhất (thường là bản gốc) → file cũ nhất.
+ * Với nhóm identical mọi file giống hệt nhau nên thực chất là chọn đường dẫn ngắn nhất.
  */
-function pickKeeper(group: DuplicateGroup, itemMap: Map<string, MediaFileItem>): string {
+function pickKeeper(
+  group: DuplicateGroup,
+  itemMap: Map<string, MediaFileItem>,
+  videoInfo: Record<string, VideoTechInfo>
+): string {
   const members = group.filePaths.map((fp) => itemMap.get(fp)).filter(Boolean) as MediaFileItem[];
   if (members.length === 0) return group.filePaths[0];
   const sorted = members
     .slice()
     .sort(
       (a, b) =>
+        pixelCount(videoInfo[b.filePath]) - pixelCount(videoInfo[a.filePath]) ||
         b.fileSize - a.fileSize ||
         a.filePath.length - b.filePath.length ||
         a.modifiedAt - b.modifiedAt ||
@@ -129,7 +146,7 @@ export const DuplicatesModal: React.FC<DuplicatesModalProps> = ({
     return acc;
   }, {});
   const tabs = KIND_TABS.filter((k) => (counts[k] || 0) > 0 || k === kindFilter);
-  const durations = result?.videoDurations || {};
+  const videoInfo = result?.videoInfo || {};
   // Nhóm "có thể trùng" chưa chắc là cùng nội dung → không tính vào dung lượng có thể giải phóng
   const totalReclaimable = groups
     .filter((g) => g.confidence === 'high')
@@ -151,7 +168,7 @@ export const DuplicatesModal: React.FC<DuplicatesModalProps> = ({
       if (onlyIdentical && g.kind !== 'identical') continue;
       // Không tự động đánh dấu xóa trong nhóm "có thể trùng" – người dùng tự kiểm tra
       if (g.confidence === 'low') continue;
-      const keeper = pickKeeper(g, itemMap);
+      const keeper = pickKeeper(g, itemMap, videoInfo);
       for (const fp of g.filePaths) if (fp !== keeper) next.add(fp);
     }
     setMarked(next);
@@ -307,7 +324,11 @@ export const DuplicatesModal: React.FC<DuplicatesModalProps> = ({
           )}
 
           {groups.map((g) => {
-            const keeper = g.confidence === 'high' ? pickKeeper(g, itemMap) : null;
+            const keeper = g.confidence === 'high' ? pickKeeper(g, itemMap, videoInfo) : null;
+            // Làm nổi bật bản có độ phân giải cao nhất khi trong nhóm có nhiều mức độ phân giải khác nhau
+            const pixelsInGroup = g.filePaths.map((fp) => pixelCount(videoInfo[fp])).filter((p) => p > 0);
+            const maxPixels = Math.max(0, ...pixelsInGroup);
+            const hasMixedResolution = new Set(pixelsInGroup).size > 1;
             return (
               <div
                 key={g.id}
@@ -353,6 +374,10 @@ export const DuplicatesModal: React.FC<DuplicatesModalProps> = ({
                     const item = itemMap.get(fp);
                     const isMarked = marked.has(fp);
                     const isKeeper = fp === keeper;
+                    const vi = videoInfo[fp];
+                    const pixels = pixelCount(vi);
+                    const isBestRes = hasMixedResolution && pixels === maxPixels;
+                    const isLowerRes = hasMixedResolution && pixels > 0 && pixels < maxPixels;
                     return (
                       <div
                         key={fp}
@@ -397,10 +422,43 @@ export const DuplicatesModal: React.FC<DuplicatesModalProps> = ({
                             {item?.directory}
                           </div>
                         </div>
+                        {item?.mediaType === 'video' && (
+                          <div
+                            className="text-right shrink-0 w-24"
+                            title={
+                              vi?.width && vi?.height
+                                ? `Độ phân giải ${vi.width}×${vi.height}${
+                                    isBestRes ? ' – cao nhất trong nhóm' : isLowerRes ? ' – thấp hơn bản tốt nhất' : ''
+                                  }`
+                                : 'Không đọc được độ phân giải'
+                            }
+                          >
+                            {vi?.width && vi?.height ? (
+                              <>
+                                <span
+                                  className={`inline-block px-1.5 py-0.5 text-[10px] font-bold rounded border ${
+                                    isBestRes
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                      : isLowerRes
+                                        ? 'bg-slate-800 text-slate-400 border-slate-700'
+                                        : 'bg-indigo-500/10 text-indigo-200 border-indigo-500/30'
+                                  }`}
+                                >
+                                  {resolutionLabel(vi.width, vi.height)}
+                                </span>
+                                <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                                  {vi.width}×{vi.height}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-slate-600">—</span>
+                            )}
+                          </div>
+                        )}
                         <div className="text-right shrink-0">
                           <div className="text-[11px] font-mono text-slate-300">
-                            {durations[fp] !== undefined && (
-                              <span className="text-violet-300/90 mr-2">{formatDuration(durations[fp])}</span>
+                            {vi?.durationMs !== undefined && (
+                              <span className="text-violet-300/90 mr-2">{formatDuration(vi.durationMs)}</span>
                             )}
                             {item ? formatFileSize(item.fileSize) : '—'}
                           </div>

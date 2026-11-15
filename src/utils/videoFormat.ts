@@ -1,0 +1,18 @@
+/**
+ * Nhãn độ phân giải theo chuẩn thông dụng. Tính theo "cạnh dài quy đổi" = max(cạnh dài, cạnh ngắn × 16/9)
+ * để video bị cắt viền (1920×800), 4:3 (1440×1080) hay quay dọc (1080×1920) vẫn ra đúng 1080p.
+ */
+export function resolutionLabel(width: number, height: number): string {
+  const long = Math.max(width, height);
+  const short = Math.min(width, height);
+  const eff = Math.max(long, (short * 16) / 9);
+  if (eff >= 7000) return '8K';
+  if (eff >= 3800) return '4K';
+  if (eff >= 2500) return '1440p';
+  if (eff >= 1880) return '1080p';
+  if (eff >= 1240) return '720p';
+  if (eff >= 940) return '540p';
+  if (eff >= 820) return '480p';
+  if (eff >= 620) return '360p';
+  return `${short}p`;
+}

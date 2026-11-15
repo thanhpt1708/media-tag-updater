@@ -198,8 +198,14 @@ export interface DuplicateScanResult {
   scannedCount: number;
   hashedCount: number;
   durationMs: number;
-  /** filePath → thời lượng video (ms) đã đọc được */
-  videoDurations: Record<string, number>;
+  /** filePath → thông tin kỹ thuật video (thời lượng, độ phân giải) đã đọc được */
+  videoInfo: Record<string, VideoTechInfo>;
+}
+
+export interface VideoTechInfo {
+  durationMs?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface ElectronMediaApi {
